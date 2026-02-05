@@ -8,7 +8,7 @@
       "database": "",
       "user": "",
       "password": "",
-      "sslmode": "disable"
+      "sslmode": "require"
     }
   ]
 }
