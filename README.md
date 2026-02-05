@@ -3,8 +3,7 @@
 ## Install
 
 ```bash
-brew tap genesisdayrit/tap
-brew install dbharness
+brew install genesisdayrit/tap/dbharness
 ```
 
 From source:
