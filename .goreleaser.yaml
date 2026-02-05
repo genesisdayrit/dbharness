@@ -19,6 +19,7 @@ brews:
     repository:
       owner: genesisdayrit
       name: tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/genesisdayrit/dbharness
     description: DB Harness project initializer
     install: |
