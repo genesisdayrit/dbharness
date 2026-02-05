@@ -1,0 +1,27 @@
+project_name: dbharness
+
+builds:
+  - main: ./cmd/dbharness
+    binary: dbharness
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - name: dbharness
+    repository:
+      owner: genesisdayrit
+      name: tap
+    homepage: https://github.com/genesisdayrit/dbharness
+    description: DB Harness project initializer
+    install: |
+      bin.install "dbharness"
+    test: |
+      system "#{bin}/dbharness", "init", "--help"
