@@ -70,7 +70,7 @@ func runInit(args []string) {
 }
 
 type config struct {
-	Databases []databaseConfig `json:"databases"`
+	Connections []databaseConfig `json:"connections"`
 }
 
 type databaseConfig struct {
@@ -129,15 +129,15 @@ func readConfig(path string) (config, error) {
 	if err := json.NewDecoder(file).Decode(&cfg); err != nil {
 		return config{}, fmt.Errorf("decode config: %w", err)
 	}
-	if len(cfg.Databases) == 0 {
-		return config{}, fmt.Errorf("config has no databases")
+	if len(cfg.Connections) == 0 {
+		return config{}, fmt.Errorf("config has no connections")
 	}
 
 	return cfg, nil
 }
 
 func findDatabaseConfig(cfg config, name string) (databaseConfig, error) {
-	for _, entry := range cfg.Databases {
+	for _, entry := range cfg.Connections {
 		if entry.Name == name {
 			return entry, nil
 		}
@@ -350,7 +350,7 @@ func addDatabaseEntry(targetDir string) {
 	fmt.Println("Connection ok!")
 	fmt.Println()
 
-	cfg.Databases = append(cfg.Databases, entry)
+	cfg.Connections = append(cfg.Connections, entry)
 	if err := writeConfig(configPath, cfg); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

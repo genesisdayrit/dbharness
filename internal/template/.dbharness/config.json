@@ -1,5 +1,5 @@
 {
-  "databases": [
+  "connections": [
     {
       "name": "default",
       "type": "postgres",
