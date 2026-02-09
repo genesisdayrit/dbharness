@@ -31,6 +31,8 @@ func main() {
 		runInit(os.Args[2:])
 	case "test-connection":
 		runTestConnection(os.Args[2:])
+	case "snapshot":
+		runSnapshot(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -41,6 +43,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
 	fmt.Fprintln(os.Stderr, "  dbharness init [--force]")
 	fmt.Fprintln(os.Stderr, "  dbharness test-connection [-s name]")
+	fmt.Fprintln(os.Stderr, "  dbharness snapshot")
+	fmt.Fprintln(os.Stderr, "  dbharness snapshot config")
 }
 
 func runInit(args []string) {
@@ -122,6 +126,76 @@ func runTestConnection(args []string) {
 	}
 
 	fmt.Printf("Connection ok: %s\n", dbConfig.Name)
+}
+
+func runSnapshot(args []string) {
+	flags := flag.NewFlagSet("snapshot", flag.ExitOnError)
+	_ = flags.Parse(args)
+
+	configOnly := flags.NArg() > 0 && flags.Arg(0) == "config"
+
+	ensureGitignore()
+
+	timestamp := time.Now().Format("20060102_150405")
+	snapshotDir := filepath.Join(".", ".dbharness-snapshots", timestamp)
+	sourceDir := filepath.Join(".", ".dbharness")
+
+	if configOnly {
+		srcPath := filepath.Join(sourceDir, "config.json")
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "read config: %v\n", err)
+			os.Exit(1)
+		}
+		if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "create snapshot dir: %v\n", err)
+			os.Exit(1)
+		}
+		destPath := filepath.Join(snapshotDir, "config.json")
+		if err := os.WriteFile(destPath, data, 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "write snapshot: %v\n", err)
+			os.Exit(1)
+		}
+		absPath, _ := filepath.Abs(destPath)
+		fmt.Printf("Snapshot saved to %s\n", absPath)
+	} else {
+		source := os.DirFS(sourceDir)
+		if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "create snapshot dir: %v\n", err)
+			os.Exit(1)
+		}
+		if err := copyFS(source, snapshotDir); err != nil {
+			fmt.Fprintf(os.Stderr, "snapshot: %v\n", err)
+			os.Exit(1)
+		}
+		absPath, _ := filepath.Abs(snapshotDir)
+		fmt.Printf("Snapshot saved to %s\n", absPath)
+	}
+}
+
+func ensureGitignore() {
+	const entry = ".dbharness-snapshots/"
+	gitignorePath := filepath.Join(".", ".gitignore")
+
+	data, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		os.WriteFile(gitignorePath, []byte(entry+"\n"), 0o644)
+		return
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == entry {
+			return
+		}
+	}
+
+	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	f.WriteString("\n" + entry + "\n")
 }
 
 func readConfig(path string) (config, error) {

@@ -1,4 +1,5 @@
 .env
 .context/
 .dbharness/
+.dbharness-snapshots/
 dbharness
