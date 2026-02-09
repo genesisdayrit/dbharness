@@ -136,7 +136,7 @@ func runSnapshot(args []string) {
 
 	ensureGitignore()
 
-	timestamp := time.Now().Format("20060102_150405")
+	timestamp := time.Now().Format("20060102_1504_05")
 	snapshotDir := filepath.Join(".", ".dbharness-snapshots", timestamp)
 	sourceDir := filepath.Join(".", ".dbharness")
 
