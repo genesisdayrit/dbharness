@@ -8,7 +8,7 @@ Running `dbharness snapshot` copies the entire `.dbharness/` directory:
 
 ```
 $ dbharness snapshot
-Snapshot saved to /path/to/project/.dbharness-snapshots/20250209_143022
+Snapshot saved to /path/to/project/.dbharness-snapshots/20250209_1430_22
 ```
 
 This creates a full copy of all files in `.dbharness/` including `config.json`, `README.md`, and `.gitignore`.
@@ -19,22 +19,22 @@ Running `dbharness snapshot config` copies only the `config.json` file:
 
 ```
 $ dbharness snapshot config
-Snapshot saved to /path/to/project/.dbharness-snapshots/20250209_143055/config.json
+Snapshot saved to /path/to/project/.dbharness-snapshots/20250209_1430_55/config.json
 ```
 
 This is useful when you only need to preserve your connection configuration before making changes.
 
 ## Snapshot directory structure
 
-Snapshots are organized by timestamp in `yyyymmdd_hhmmss` format:
+Snapshots are organized by timestamp in `yyyymmdd_hhmm_ss` format:
 
 ```
 .dbharness-snapshots/
-  20250209_143022/
+  20250209_1430_22/
     config.json
     README.md
     .gitignore
-  20250209_143055/
+  20250209_1430_55/
     config.json
 ```
 
