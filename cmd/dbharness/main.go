@@ -55,7 +55,7 @@ func runInit(args []string) {
 		fmt.Printf(".dbharness already exists at %s\n", absPath)
 		fmt.Println()
 		if promptYesNo("Would you like to add a new connection?") {
-			addConnectionEntry(targetDir)
+			addConnectionEntry(targetDir, false)
 		} else {
 			fmt.Println("No changes made.")
 		}
@@ -70,7 +70,7 @@ func runInit(args []string) {
 	absPath, _ := filepath.Abs(targetDir)
 	fmt.Printf("Installed .dbharness to %s\n", absPath)
 	fmt.Println()
-	addConnectionEntry(targetDir)
+	addConnectionEntry(targetDir, true)
 }
 
 type config struct {
@@ -87,6 +87,7 @@ type databaseConfig struct {
 	User        string `json:"user"`
 	Password    string `json:"password"`
 	SSLMode     string `json:"sslmode"`
+	Primary     bool   `json:"primary"`
 }
 
 func runTestConnection(args []string) {
@@ -302,7 +303,7 @@ func writeConfig(path string, cfg config) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func addConnectionEntry(targetDir string) {
+func addConnectionEntry(targetDir string, firstInit bool) {
 	configPath := filepath.Join(targetDir, "config.json")
 	cfg, err := readConfig(configPath)
 	if err != nil {
@@ -333,16 +334,25 @@ func addConnectionEntry(targetDir string) {
 	password := promptStringRequired("Password")
 	sslMode := promptSelect("SSL Mode", []string{"require", "disable"})
 
+	primary := firstInit
+	if !firstInit {
+		fmt.Println()
+		fmt.Println("The primary connection is used by default when running commands")
+		fmt.Println("like test-connection without specifying a connection name.")
+		primary = promptYesNo("Set as primary connection?")
+	}
+
 	entry := databaseConfig{
 		Name:        name,
 		Environment: environment,
 		Type:        dbType,
-		Host:     host,
-		Port:     port,
-		Database: database,
-		User:     user,
-		Password: password,
-		SSLMode:  sslMode,
+		Host:        host,
+		Port:        port,
+		Database:    database,
+		User:        user,
+		Password:    password,
+		SSLMode:     sslMode,
+		Primary:     primary,
 	}
 
 	fmt.Println()
@@ -354,6 +364,12 @@ func addConnectionEntry(targetDir string) {
 	}
 	fmt.Println("Connection ok!")
 	fmt.Println()
+
+	if primary {
+		for i := range cfg.Connections {
+			cfg.Connections[i].Primary = false
+		}
+	}
 
 	cfg.Connections = append(cfg.Connections, entry)
 	if err := writeConfig(configPath, cfg); err != nil {
