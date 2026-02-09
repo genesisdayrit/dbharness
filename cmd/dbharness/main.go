@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/huh"
 	"github.com/genesisdayrit/dbharness/internal/template"
 	_ "github.com/lib/pq"
 )
@@ -264,7 +265,7 @@ func promptStringRequired(label string) string {
 
 func promptInt(label string, defaultVal int) int {
 	for {
-		fmt.Printf("%s (%d): ", label, defaultVal)
+		fmt.Printf("%s: ", label)
 		input := readLine()
 		if input == "" {
 			return defaultVal
@@ -278,21 +279,18 @@ func promptInt(label string, defaultVal int) int {
 	}
 }
 
-func promptOption(label string, options []string, defaultVal string) string {
-	optionList := strings.Join(options, ", ")
-	for {
-		fmt.Printf("%s [%s]\n  (%s): ", label, optionList, defaultVal)
-		input := readLine()
-		if input == "" {
-			return defaultVal
-		}
-		for _, opt := range options {
-			if input == opt {
-				return input
-			}
-		}
-		fmt.Printf("  Invalid option. Choose from: %s\n", optionList)
+func promptSelect(label string, options []string) string {
+	opts := make([]huh.Option[string], len(options))
+	for i, o := range options {
+		opts[i] = huh.NewOption(o, o)
 	}
+	var result string
+	huh.NewSelect[string]().
+		Title(label).
+		Options(opts...).
+		Value(&result).
+		Run()
+	return result
 }
 
 func writeConfig(path string, cfg config) error {
@@ -321,14 +319,19 @@ func addConnectionEntry(targetDir string) {
 		fmt.Printf("  %q already exists, choose another.\n", name)
 	}
 
-	environment := promptString("Environment [prod, staging, dev, local, testing]", "")
-	dbType := promptString("Database type", "postgres")
+	dbType := promptSelect("Database type", []string{"postgres"})
+	environment := promptSelect("Environment", []string{
+		"production", "staging", "development", "local", "testing", "(skip for now)",
+	})
+	if environment == "(skip for now)" {
+		environment = ""
+	}
 	host := promptStringRequired("Host")
-	port := promptInt("Port", 5432)
+	port := promptInt("Port (press Enter for 5432)", 5432)
 	database := promptStringRequired("Database")
 	user := promptStringRequired("User")
 	password := promptStringRequired("Password")
-	sslMode := promptOption("SSL Mode", []string{"require", "disable"}, "require")
+	sslMode := promptSelect("SSL Mode", []string{"require", "disable"})
 
 	entry := databaseConfig{
 		Name:        name,
