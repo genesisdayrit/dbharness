@@ -14,21 +14,22 @@ $ dbharness init
 Installed .dbharness to /path/to/project/.dbharness
 
 Connection name: my-db
-Environment [prod, staging, dev, local, testing] (): local
-Database type (postgres):
+? Database type: postgres
+? Environment: local
 Host: localhost
-Port (5432):
+Port (press Enter for 5432):
 Database: myapp
 User: postgres
 Password: secret
-SSL Mode [require, disable]
-  (require): disable
+? SSL Mode: require
 
 Testing connection to my-db...
 Connection ok!
 
 Added "my-db" to /path/to/project/.dbharness/config.json
 ```
+
+Fields marked with `?` use interactive arrow-key selectors — use up/down arrows to choose, then press Enter to confirm.
 
 The connection is tested before saving. If the test fails, nothing is written to the config.
 
@@ -42,7 +43,8 @@ $ dbharness init
 
 Would you like to add a new connection? (y/n): y
 Connection name: staging-db
-Environment [prod, staging, dev, local, testing] (): staging
+? Database type: postgres
+? Environment: staging
 ...
 ```
 
@@ -53,14 +55,14 @@ Connection names must be unique. If you enter a name that already exists, you'll
 | Field | Required | Default | Notes |
 |-------|----------|---------|-------|
 | Connection name | Yes | — | Must be unique across connections |
-| Environment | No | — | Recommended: `prod`, `staging`, `dev`, `local`, `testing` |
-| Database type | No | `postgres` | Only `postgres` is supported for connection testing currently |
+| Database type | Yes | — | Interactive selector. Only `postgres` is supported currently |
+| Environment | No | — | Interactive selector: `production`, `staging`, `development`, `local`, `testing`, or skip |
 | Host | Yes | — | |
-| Port | No | `5432` | |
+| Port | No | `5432` | Press Enter to accept default |
 | Database | Yes | — | |
 | User | Yes | — | |
 | Password | Yes | — | |
-| SSL Mode | No | `require` | Options: `require`, `disable` |
+| SSL Mode | Yes | — | Interactive selector: `require`, `disable` |
 
 ## Re-initializing with `--force`
 

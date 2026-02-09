@@ -23,21 +23,22 @@ $ dbharness init
 Installed .dbharness to /path/to/project/.dbharness
 
 Connection name: my-db
-Environment [prod, staging, dev, local, testing] (): local
-Database type (postgres):
+? Database type: postgres
+? Environment: local
 Host: localhost
-Port (5432):
+Port (press Enter for 5432):
 Database: myapp
 User: postgres
 Password: secret
-SSL Mode [require, disable]
-  (require): disable
+? SSL Mode: require
 
 Testing connection to my-db...
 Connection ok!
 
 Added "my-db" to /path/to/project/.dbharness/config.json
 ```
+
+Database type, environment, and SSL mode use interactive arrow-key selectors.
 
 Running `dbharness init` again will prompt you to add another connection to the existing config.
 
