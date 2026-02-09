@@ -53,8 +53,8 @@ func runInit(args []string) {
 		absPath, _ := filepath.Abs(targetDir)
 		fmt.Printf(".dbharness already exists at %s\n", absPath)
 		fmt.Println()
-		if promptYesNo("Would you like to add a new database config?") {
-			addDatabaseEntry(targetDir)
+		if promptYesNo("Would you like to add a new connection?") {
+			addConnectionEntry(targetDir)
 		} else {
 			fmt.Println("No changes made.")
 		}
@@ -66,7 +66,10 @@ func runInit(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Installed .dbharness to %s\n", targetDir)
+	absPath, _ := filepath.Abs(targetDir)
+	fmt.Printf("Installed .dbharness to %s\n", absPath)
+	fmt.Println()
+	addConnectionEntry(targetDir)
 }
 
 type config struct {
@@ -74,14 +77,15 @@ type config struct {
 }
 
 type databaseConfig struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	SSLMode  string `json:"sslmode"`
+	Name        string `json:"name"`
+	Environment string `json:"environment,omitempty"`
+	Type        string `json:"type"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	Database    string `json:"database"`
+	User        string `json:"user"`
+	Password    string `json:"password"`
+	SSLMode     string `json:"sslmode"`
 }
 
 func runTestConnection(args []string) {
@@ -129,10 +133,6 @@ func readConfig(path string) (config, error) {
 	if err := json.NewDecoder(file).Decode(&cfg); err != nil {
 		return config{}, fmt.Errorf("decode config: %w", err)
 	}
-	if len(cfg.Connections) == 0 {
-		return config{}, fmt.Errorf("config has no connections")
-	}
-
 	return cfg, nil
 }
 
@@ -304,7 +304,7 @@ func writeConfig(path string, cfg config) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func addDatabaseEntry(targetDir string) {
+func addConnectionEntry(targetDir string) {
 	configPath := filepath.Join(targetDir, "config.json")
 	cfg, err := readConfig(configPath)
 	if err != nil {
@@ -321,6 +321,7 @@ func addDatabaseEntry(targetDir string) {
 		fmt.Printf("  %q already exists, choose another.\n", name)
 	}
 
+	environment := promptString("Environment [prod, staging, dev, local, testing]", "")
 	dbType := promptString("Database type", "postgres")
 	host := promptStringRequired("Host")
 	port := promptInt("Port", 5432)
@@ -330,8 +331,9 @@ func addDatabaseEntry(targetDir string) {
 	sslMode := promptOption("SSL Mode", []string{"require", "disable"}, "require")
 
 	entry := databaseConfig{
-		Name:     name,
-		Type:     dbType,
+		Name:        name,
+		Environment: environment,
+		Type:        dbType,
 		Host:     host,
 		Port:     port,
 		Database: database,
