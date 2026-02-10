@@ -52,17 +52,87 @@ Connection names must be unique. If you enter a name that already exists, you'll
 
 ## Prompted fields
 
+The following fields are shared across all database types:
+
 | Field | Required | Default | Notes |
 |-------|----------|---------|-------|
 | Connection name | Yes | — | Must be unique across connections |
-| Database type | Yes | — | Interactive selector. Only `postgres` is supported currently |
+| Database type | Yes | — | Interactive selector: `postgres`, `snowflake` |
 | Environment | No | — | Interactive selector: `production`, `staging`, `development`, `local`, `testing`, or skip |
+
+### Postgres fields
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
 | Host | Yes | — | |
 | Port | No | `5432` | Press Enter to accept default |
 | Database | Yes | — | |
 | User | Yes | — | |
 | Password | Yes | — | |
 | SSL Mode | Yes | — | Interactive selector: `require`, `disable` |
+
+### Snowflake fields
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| Account | Yes | — | Format: `org-account_name` |
+| Authenticator | Yes | — | Interactive selector: `externalbrowser` (SSO), `snowflake username & password` |
+| User | Yes | — | |
+| Password | Yes (if username & password auth) | — | Only prompted when authenticator is `snowflake username & password` |
+| Role | Yes | — | |
+| Warehouse | Yes | — | |
+| Default database | No | — | Press Enter to skip |
+| Default schema | No | — | Press Enter to skip |
+
+## Snowflake example
+
+### SSO (External Browser)
+
+```
+$ dbharness init
+Installed .dbharness to /path/to/project/.dbharness
+
+Connection name: analytics
+? Database type: snowflake
+? Environment: production
+Account (e.g. org-account_name): myorg-myaccount
+? Authenticator: externalbrowser
+User: jsmith@company.com
+Role: ANALYST
+Warehouse: COMPUTE_WH
+Default database (optional, press Enter to skip): ANALYTICS
+Default schema (optional, press Enter to skip): PUBLIC
+
+Testing connection to analytics...
+Opening browser for SSO authentication...
+Connection ok!
+
+Added "analytics" to /path/to/project/.dbharness/config.json
+```
+
+### Username & Password
+
+```
+$ dbharness init
+Installed .dbharness to /path/to/project/.dbharness
+
+Connection name: snowflake-svc
+? Database type: snowflake
+? Environment: development
+Account (e.g. org-account_name): myorg-myaccount
+? Authenticator: snowflake username & password
+User: SVC_ACCOUNT
+Password: secret123
+Role: TRANSFORMER
+Warehouse: COMPUTE_WH
+Default database (optional, press Enter to skip): TRANSFORMATIONS
+Default schema (optional, press Enter to skip): dbt_dev
+
+Testing connection to snowflake-svc...
+Connection ok!
+
+Added "snowflake-svc" to /path/to/project/.dbharness/config.json
+```
 
 ## Re-initializing with `--force`
 
@@ -78,6 +148,8 @@ This deletes the existing `.dbharness/` directory, creates a new one, and prompt
 
 Connections are stored in `.dbharness/config.json`:
 
+Postgres example:
+
 ```json
 {
   "connections": [
@@ -85,10 +157,11 @@ Connections are stored in `.dbharness/config.json`:
       "name": "my-db",
       "environment": "local",
       "type": "postgres",
-      "host": "localhost",
-      "port": 5432,
+      "primary": true,
       "database": "myapp",
       "user": "postgres",
+      "host": "localhost",
+      "port": 5432,
       "password": "secret",
       "sslmode": "disable"
     }
@@ -96,4 +169,48 @@ Connections are stored in `.dbharness/config.json`:
 }
 ```
 
-The `environment` field is omitted from the JSON when left blank.
+Snowflake example (SSO):
+
+```json
+{
+  "connections": [
+    {
+      "name": "analytics",
+      "environment": "production",
+      "type": "snowflake",
+      "primary": true,
+      "database": "ANALYTICS",
+      "user": "jsmith@company.com",
+      "account": "myorg-myaccount",
+      "role": "ANALYST",
+      "warehouse": "COMPUTE_WH",
+      "schema": "PUBLIC",
+      "authenticator": "externalbrowser"
+    }
+  ]
+}
+```
+
+Snowflake example (username & password):
+
+```json
+{
+  "connections": [
+    {
+      "name": "snowflake-svc",
+      "type": "snowflake",
+      "primary": false,
+      "database": "TRANSFORMATIONS",
+      "user": "SVC_ACCOUNT",
+      "password": "secret123",
+      "account": "myorg-myaccount",
+      "role": "TRANSFORMER",
+      "warehouse": "COMPUTE_WH",
+      "schema": "dbt_dev",
+      "authenticator": "snowflake"
+    }
+  ]
+}
+```
+
+The `environment` field is omitted from the JSON when left blank. Type-specific fields (e.g. `host`, `port`, `sslmode` for Postgres; `account`, `role`, `warehouse`, `schema`, `authenticator` for Snowflake) are omitted when not applicable.

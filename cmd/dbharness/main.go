@@ -446,17 +446,22 @@ func collectPostgresConfig(entry *databaseConfig) {
 
 func collectSnowflakeConfig(entry *databaseConfig) {
 	entry.Account = promptStringRequired("Account (e.g. org-account_name)")
+	auth := promptSelect("Authenticator", []string{"externalbrowser", "snowflake username & password"})
+	if auth == "snowflake username & password" {
+		entry.Authenticator = "snowflake"
+	} else {
+		entry.Authenticator = auth
+	}
 	entry.User = promptStringRequired("User")
-	entry.Authenticator = promptSelect("Authenticator", []string{"externalbrowser", "snowflake"})
+	if entry.Authenticator == "snowflake" {
+		entry.Password = promptStringRequired("Password")
+	}
 	entry.Role = promptStringRequired("Role")
 	entry.Warehouse = promptStringRequired("Warehouse")
 	fmt.Print("Default database (optional, press Enter to skip): ")
 	entry.Database = readLine()
 	fmt.Print("Default schema (optional, press Enter to skip): ")
 	entry.Schema = readLine()
-	if entry.Authenticator == "snowflake" {
-		entry.Password = promptStringRequired("Password")
-	}
 }
 
 func addConnectionEntry(targetDir string, firstInit bool) {
