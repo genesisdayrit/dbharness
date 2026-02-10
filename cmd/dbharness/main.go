@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/genesisdayrit/dbharness/internal/template"
 	_ "github.com/lib/pq"
+	"github.com/snowflakedb/gosnowflake"
 )
 
 func main() {
@@ -85,13 +86,24 @@ type databaseConfig struct {
 	Name        string `json:"name"`
 	Environment string `json:"environment,omitempty"`
 	Type        string `json:"type"`
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	Database    string `json:"database"`
-	User        string `json:"user"`
-	Password    string `json:"password"`
-	SSLMode     string `json:"sslmode"`
 	Primary     bool   `json:"primary"`
+
+	// Shared
+	Database string `json:"database,omitempty"`
+	User     string `json:"user"`
+
+	// Postgres-specific
+	Host     string `json:"host,omitempty"`
+	Port     int    `json:"port,omitempty"`
+	Password string `json:"password,omitempty"`
+	SSLMode  string `json:"sslmode,omitempty"`
+
+	// Snowflake-specific
+	Account       string `json:"account,omitempty"`
+	Role          string `json:"role,omitempty"`
+	Warehouse     string `json:"warehouse,omitempty"`
+	Schema        string `json:"schema,omitempty"`
+	Authenticator string `json:"authenticator,omitempty"`
 }
 
 func runTestConnection(args []string) {
@@ -226,8 +238,10 @@ func pingDatabase(entry databaseConfig) error {
 	switch entry.Type {
 	case "postgres":
 		return pingPostgres(entry)
+	case "snowflake":
+		return pingSnowflake(entry)
 	default:
-		return fmt.Errorf("unsupported database type %q (only postgres is supported)", entry.Type)
+		return fmt.Errorf("unsupported database type %q", entry.Type)
 	}
 }
 
@@ -257,6 +271,50 @@ func pingPostgres(entry databaseConfig) error {
 
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping postgres: %w", err)
+	}
+
+	return nil
+}
+
+func pingSnowflake(entry databaseConfig) error {
+	sfConfig := &gosnowflake.Config{
+		Account:   entry.Account,
+		User:      entry.User,
+		Password:  entry.Password,
+		Role:      entry.Role,
+		Warehouse: entry.Warehouse,
+		Database:  entry.Database,
+		Schema:    entry.Schema,
+	}
+
+	switch entry.Authenticator {
+	case "externalbrowser":
+		sfConfig.Authenticator = gosnowflake.AuthTypeExternalBrowser
+	default:
+		sfConfig.Authenticator = gosnowflake.AuthTypeSnowflake
+	}
+
+	dsn, err := gosnowflake.DSN(sfConfig)
+	if err != nil {
+		return fmt.Errorf("build snowflake DSN: %w", err)
+	}
+
+	db, err := sql.Open("snowflake", dsn)
+	if err != nil {
+		return fmt.Errorf("open snowflake connection: %w", err)
+	}
+	defer db.Close()
+
+	timeout := 10 * time.Second
+	if entry.Authenticator == "externalbrowser" {
+		timeout = 120 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping snowflake: %w", err)
 	}
 
 	return nil
@@ -377,6 +435,30 @@ func writeConfig(path string, cfg config) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+func collectPostgresConfig(entry *databaseConfig) {
+	entry.Host = promptStringRequired("Host")
+	entry.Port = promptInt("Port (press Enter for 5432)", 5432)
+	entry.Database = promptStringRequired("Database")
+	entry.User = promptStringRequired("User")
+	entry.Password = promptStringRequired("Password")
+	entry.SSLMode = promptSelect("SSL Mode", []string{"require", "disable"})
+}
+
+func collectSnowflakeConfig(entry *databaseConfig) {
+	entry.Account = promptStringRequired("Account (e.g. org-account_name)")
+	entry.User = promptStringRequired("User")
+	entry.Authenticator = promptSelect("Authenticator", []string{"externalbrowser", "snowflake"})
+	entry.Role = promptStringRequired("Role")
+	entry.Warehouse = promptStringRequired("Warehouse")
+	fmt.Print("Default database (optional, press Enter to skip): ")
+	entry.Database = readLine()
+	fmt.Print("Default schema (optional, press Enter to skip): ")
+	entry.Schema = readLine()
+	if entry.Authenticator == "snowflake" {
+		entry.Password = promptStringRequired("Password")
+	}
+}
+
 func addConnectionEntry(targetDir string, firstInit bool) {
 	configPath := filepath.Join(targetDir, "config.json")
 	cfg, err := readConfig(configPath)
@@ -394,19 +476,26 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		fmt.Printf("  %q already exists, choose another.\n", name)
 	}
 
-	dbType := promptSelect("Database type", []string{"postgres"})
+	dbType := promptSelect("Database type", []string{"postgres", "snowflake"})
 	environment := promptSelect("Environment", []string{
 		"production", "staging", "development", "local", "testing", "(skip for now)",
 	})
 	if environment == "(skip for now)" {
 		environment = ""
 	}
-	host := promptStringRequired("Host")
-	port := promptInt("Port (press Enter for 5432)", 5432)
-	database := promptStringRequired("Database")
-	user := promptStringRequired("User")
-	password := promptStringRequired("Password")
-	sslMode := promptSelect("SSL Mode", []string{"require", "disable"})
+
+	entry := databaseConfig{
+		Name:        name,
+		Environment: environment,
+		Type:        dbType,
+	}
+
+	switch dbType {
+	case "postgres":
+		collectPostgresConfig(&entry)
+	case "snowflake":
+		collectSnowflakeConfig(&entry)
+	}
 
 	primary := firstInit
 	if !firstInit {
@@ -415,22 +504,13 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		fmt.Println("like test-connection without specifying a connection name.")
 		primary = promptYesNo("Set as primary connection?")
 	}
-
-	entry := databaseConfig{
-		Name:        name,
-		Environment: environment,
-		Type:        dbType,
-		Host:        host,
-		Port:        port,
-		Database:    database,
-		User:        user,
-		Password:    password,
-		SSLMode:     sslMode,
-		Primary:     primary,
-	}
+	entry.Primary = primary
 
 	fmt.Println()
 	fmt.Printf("Testing connection to %s...\n", name)
+	if entry.Type == "snowflake" && entry.Authenticator == "externalbrowser" {
+		fmt.Println("Opening browser for SSO authentication...")
+	}
 	if err := pingDatabase(entry); err != nil {
 		fmt.Fprintf(os.Stderr, "Connection failed: %v\n", err)
 		fmt.Fprintln(os.Stderr, "\nDatabase config was not saved. Please check your connection details and try again.")
