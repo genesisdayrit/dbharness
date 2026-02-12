@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
+	"github.com/genesisdayrit/dbharness/internal/contextgen"
+	"github.com/genesisdayrit/dbharness/internal/discovery"
 	"github.com/genesisdayrit/dbharness/internal/template"
 	_ "github.com/lib/pq"
 	"github.com/snowflakedb/gosnowflake"
@@ -34,6 +36,8 @@ func main() {
 		runTestConnection(os.Args[2:])
 	case "snapshot":
 		runSnapshot(os.Args[2:])
+	case "schemas":
+		runSchemas(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -46,6 +50,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbharness test-connection [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbharness snapshot")
 	fmt.Fprintln(os.Stderr, "  dbharness snapshot config")
+	fmt.Fprintln(os.Stderr, "  dbharness schemas [-s name]")
 }
 
 func runInit(args []string) {
@@ -183,6 +188,129 @@ func runSnapshot(args []string) {
 		absPath, _ := filepath.Abs(snapshotDir)
 		fmt.Printf("Snapshot saved to %s\n", absPath)
 	}
+}
+
+func runSchemas(args []string) {
+	flags := flag.NewFlagSet("schemas", flag.ExitOnError)
+	shortName := flags.String("s", "", "Connection name from config.json.")
+	longName := flags.String("name", "", "Connection name from config.json.")
+	_ = flags.Parse(args)
+
+	name := *shortName
+	if name == "" {
+		name = *longName
+	}
+
+	baseDir := filepath.Join(".", ".dbharness")
+	cfg, err := readConfig(filepath.Join(baseDir, "config.json"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	// If no name provided, use the primary connection or the first one.
+	var dbCfg databaseConfig
+	if name == "" {
+		dbCfg, err = findPrimaryConnection(cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	} else {
+		dbCfg, err = findDatabaseConfig(cfg, name)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Printf("Discovering schemas for connection %q (%s)...\n", dbCfg.Name, dbCfg.Type)
+	if dbCfg.Type == "snowflake" && dbCfg.Authenticator == "externalbrowser" {
+		fmt.Println("Opening browser for SSO authentication...")
+	}
+
+	discoveryCfg := discovery.DatabaseConfig{
+		Type:          dbCfg.Type,
+		Database:      dbCfg.Database,
+		Host:          dbCfg.Host,
+		Port:          dbCfg.Port,
+		User:          dbCfg.User,
+		Password:      dbCfg.Password,
+		SSLMode:       dbCfg.SSLMode,
+		Account:       dbCfg.Account,
+		Role:          dbCfg.Role,
+		Warehouse:     dbCfg.Warehouse,
+		Schema:        dbCfg.Schema,
+		Authenticator: dbCfg.Authenticator,
+	}
+
+	disc, err := discovery.New(discoveryCfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "connect: %v\n", err)
+		os.Exit(1)
+	}
+	defer disc.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	schemas, err := disc.Discover(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "discover schemas: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Found %d schema(s)\n", len(schemas))
+
+	totalTables := 0
+	for _, s := range schemas {
+		totalTables += len(s.Tables)
+		fmt.Printf("  %-30s %d table(s)\n", s.Name, len(s.Tables))
+	}
+	fmt.Printf("Total: %d table(s) across %d schema(s)\n", totalTables, len(schemas))
+	fmt.Println()
+
+	opts := contextgen.Options{
+		ConnectionName: dbCfg.Name,
+		DatabaseName:   dbCfg.Database,
+		DatabaseType:   dbCfg.Type,
+		BaseDir:        baseDir,
+	}
+
+	if err := contextgen.Generate(schemas, opts); err != nil {
+		fmt.Fprintf(os.Stderr, "generate context files: %v\n", err)
+		os.Exit(1)
+	}
+
+	contextDir := filepath.Join(baseDir, "context", dbCfg.Name)
+	absPath, _ := filepath.Abs(contextDir)
+	fmt.Printf("Schema context files written to %s\n", absPath)
+	fmt.Println()
+	fmt.Println("Files generated:")
+	fmt.Printf("  %s/schemas.yml\n", contextDir)
+	for _, s := range schemas {
+		fmt.Printf("  %s/schemas/%s/tables.yml\n", contextDir, sanitizeSchemaName(s.Name))
+	}
+}
+
+// findPrimaryConnection returns the connection marked as primary, or the
+// first connection in the list if none is marked primary.
+func findPrimaryConnection(cfg config) (databaseConfig, error) {
+	if len(cfg.Connections) == 0 {
+		return databaseConfig{}, fmt.Errorf("no connections configured in config.json")
+	}
+	for _, c := range cfg.Connections {
+		if c.Primary {
+			return c, nil
+		}
+	}
+	return cfg.Connections[0], nil
+}
+
+// sanitizeSchemaName normalises a schema name for use as a directory name.
+func sanitizeSchemaName(name string) string {
+	r := strings.NewReplacer("/", "_", "\\", "_", " ", "_", ".", "_")
+	return strings.ToLower(r.Replace(name))
 }
 
 func ensureGitignore() {
