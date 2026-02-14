@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -172,6 +173,69 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	}
 
 	return nil
+}
+
+// UpdateDatabasesFile writes or merges a _databases.yml file for the given
+// connection. If the file already exists, newly discovered databases are
+// appended while existing entries are preserved. If the file does not exist,
+// it is created with all discovered databases.
+func UpdateDatabasesFile(discoveredDBs []string, opts Options) (added []string, err error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	databasesDir := filepath.Join(opts.BaseDir, "context", "connections", opts.ConnectionName, "databases")
+	if err := os.MkdirAll(databasesDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create databases dir: %w", err)
+	}
+
+	databasesPath := filepath.Join(databasesDir, "_databases.yml")
+
+	// Try to read the existing file.
+	var existing DatabasesFile
+	existingData, readErr := os.ReadFile(databasesPath)
+	fileExists := readErr == nil
+
+	if fileExists {
+		if err := yaml.Unmarshal(existingData, &existing); err != nil {
+			return nil, fmt.Errorf("parse existing _databases.yml: %w", err)
+		}
+	}
+
+	// Build a set of existing database names for fast lookup.
+	existingSet := make(map[string]bool, len(existing.Databases))
+	for _, db := range existing.Databases {
+		existingSet[db.Name] = true
+	}
+
+	// Determine which databases are new.
+	var newDBs []string
+	for _, name := range discoveredDBs {
+		if !existingSet[name] {
+			newDBs = append(newDBs, name)
+		}
+	}
+
+	// Build the merged list: existing entries first (preserving order), then
+	// new entries sorted alphabetically.
+	merged := make([]DatabaseItem, len(existing.Databases))
+	copy(merged, existing.Databases)
+
+	sort.Strings(newDBs)
+	for _, name := range newDBs {
+		merged = append(merged, DatabaseItem{Name: name})
+	}
+
+	df := DatabasesFile{
+		Connection:   opts.ConnectionName,
+		DatabaseType: opts.DatabaseType,
+		GeneratedAt:  now,
+		Databases:    merged,
+	}
+
+	if err := writeYAMLWithHeader(databasesPath, df, databasesHeader(opts)); err != nil {
+		return nil, fmt.Errorf("write _databases.yml: %w", err)
+	}
+
+	return newDBs, nil
 }
 
 // --------------------------------------------------------------------------

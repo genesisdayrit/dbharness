@@ -14,6 +14,10 @@ type snowflakeDiscoverer struct {
 	database string
 }
 
+type snowflakeDatabaseLister struct {
+	db *sql.DB
+}
+
 func newSnowflake(cfg DatabaseConfig) (*snowflakeDiscoverer, error) {
 	sfConfig := &gosnowflake.Config{
 		Account:   cfg.Account,
@@ -43,6 +47,84 @@ func newSnowflake(cfg DatabaseConfig) (*snowflakeDiscoverer, error) {
 	}
 
 	return &snowflakeDiscoverer{db: db, database: cfg.Database}, nil
+}
+
+func newSnowflakeDatabaseLister(cfg DatabaseConfig) (*snowflakeDatabaseLister, error) {
+	sfConfig := &gosnowflake.Config{
+		Account:   cfg.Account,
+		User:      cfg.User,
+		Password:  cfg.Password,
+		Role:      cfg.Role,
+		Warehouse: cfg.Warehouse,
+		// Deliberately omit Database and Schema so we connect at the account level.
+	}
+
+	switch cfg.Authenticator {
+	case "externalbrowser":
+		sfConfig.Authenticator = gosnowflake.AuthTypeExternalBrowser
+	default:
+		sfConfig.Authenticator = gosnowflake.AuthTypeSnowflake
+	}
+
+	dsn, err := gosnowflake.DSN(sfConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build snowflake DSN: %w", err)
+	}
+
+	db, err := openDB("snowflake", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	return &snowflakeDatabaseLister{db: db}, nil
+}
+
+func (s *snowflakeDatabaseLister) ListDatabases(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, "SHOW DATABASES")
+	if err != nil {
+		return nil, fmt.Errorf("query snowflake databases: %w", err)
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("get column names: %w", err)
+	}
+
+	nameIdx := -1
+	for i, col := range cols {
+		if strings.EqualFold(col, "name") {
+			nameIdx = i
+			break
+		}
+	}
+	if nameIdx < 0 {
+		return nil, fmt.Errorf("SHOW DATABASES result has no 'name' column")
+	}
+
+	var databases []string
+	for rows.Next() {
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, fmt.Errorf("scan database row: %w", err)
+		}
+
+		name, ok := vals[nameIdx].(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type for database name column")
+		}
+		databases = append(databases, name)
+	}
+
+	return databases, rows.Err()
+}
+
+func (s *snowflakeDatabaseLister) Close() error {
+	return s.db.Close()
 }
 
 func (s *snowflakeDiscoverer) Discover(ctx context.Context) ([]SchemaInfo, error) {
