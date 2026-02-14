@@ -1,15 +1,15 @@
 # Schemas
 
-`dbharness schemas` connects to a database and generates LLM-friendly context files that describe the available schemas and tables. These files are written to `.dbharness/context/` and are designed to be easy for AI coding agents (Claude Code, Cursor, etc.) to discover and navigate.
+`dbh schemas` connects to a database and generates LLM-friendly context files that describe the available schemas and tables. These files are written to `.dbharness/context/` and are designed to be easy for AI coding agents (Claude Code, Cursor, etc.) to discover and navigate.
 
 ## Quick start
 
 ```bash
 # Generate schema context for the primary connection
-dbharness schemas
+dbh schemas
 
 # Generate for a specific connection
-dbharness schemas -s my-connection
+dbh schemas -s my-connection
 ```
 
 ## What it generates
@@ -117,7 +117,7 @@ Queries `INFORMATION_SCHEMA.SCHEMATA` and `INFORMATION_SCHEMA.TABLES`. The `INFO
 
 ## Re-generating
 
-Running `dbharness schemas` again overwrites the existing context files with fresh data. This is useful after schema changes (new tables, dropped schemas, etc.).
+Running `dbh schemas` again overwrites the existing context files with fresh data. This is useful after schema changes (new tables, dropped schemas, etc.).
 
 ## Connection selection
 
@@ -132,7 +132,7 @@ The command uses the same connection resolution as `test-connection`:
 ## Example output
 
 ```
-$ dbharness schemas -s my-db
+$ dbh schemas -s my-db
 Discovering schemas for connection "my-db" (postgres)...
 Found 2 schema(s)
   public                         12 table(s)

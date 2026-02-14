@@ -1,8 +1,8 @@
-project_name: dbharness
+project_name: dbh
 
 builds:
-  - main: ./cmd/dbharness
-    binary: dbharness
+  - main: ./cmd/dbh
+    binary: dbh
     goos:
       - darwin
       - linux
@@ -15,7 +15,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 brews:
-  - name: dbharness
+  - name: dbh
     repository:
       owner: genesisdayrit
       name: tap
@@ -23,6 +23,6 @@ brews:
     homepage: https://github.com/genesisdayrit/dbharness
     description: DB Harness project initializer
     install: |
-      bin.install "dbharness"
+      bin.install "dbh"
     test: |
-      system "#{bin}/dbharness", "init", "--help"
+      system "#{bin}/dbh", "init", "--help"

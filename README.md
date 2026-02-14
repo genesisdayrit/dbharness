@@ -1,25 +1,25 @@
-# dbharness
+# dbh
 
 ## Install
 
 ```bash
-brew install genesisdayrit/tap/dbharness
+brew install genesisdayrit/tap/dbh
 ```
 
 From source:
 
 ```bash
-go install github.com/genesisdayrit/dbharness/cmd/dbharness@latest
+go install github.com/genesisdayrit/dbharness/cmd/dbh@latest
 ```
 
 ## Usage
 
-### `dbharness init`
+### `dbh init`
 
 Initializes a `.dbharness/` folder in the current directory and walks you through setting up your first database connection interactively:
 
 ```
-$ dbharness init
+$ dbh init
 Installed .dbharness to /path/to/project/.dbharness
 
 Connection name: my-db
@@ -40,24 +40,24 @@ Added "my-db" to /path/to/project/.dbharness/config.json
 
 Database type, environment, and SSL mode use interactive arrow-key selectors.
 
-Running `dbharness init` again will prompt you to add another connection to the existing config.
+Running `dbh init` again will prompt you to add another connection to the existing config.
 
 Use `--force` to overwrite an existing `.dbharness/` folder and start fresh:
 
 ```bash
-dbharness init --force
+dbh init --force
 ```
 
-### `dbharness schemas`
+### `dbh schemas`
 
 Connects to a database and generates LLM-friendly schema context files in `.dbharness/context/connections/`:
 
 ```bash
 # Use the primary connection
-dbharness schemas
+dbh schemas
 
 # Use a specific connection
-dbharness schemas -s my-db
+dbh schemas -s my-db
 ```
 
 This creates a nested directory structure:
@@ -76,12 +76,12 @@ This creates a nested directory structure:
 
 The YAML files are designed for AI coding agents (Claude Code, Cursor, etc.) to discover and explore database structures. Re-running the command refreshes the files with the latest schema data.
 
-### `dbharness test-connection`
+### `dbh test-connection`
 
 Tests a database connection defined in `.dbharness/config.json`:
 
 ```bash
-dbharness test-connection -s my-db
+dbh test-connection -s my-db
 ```
 
 If no name is provided, it defaults to `"default"`.

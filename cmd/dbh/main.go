@@ -46,11 +46,11 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  dbharness init [--force]")
-	fmt.Fprintln(os.Stderr, "  dbharness test-connection [-s name]")
-	fmt.Fprintln(os.Stderr, "  dbharness snapshot")
-	fmt.Fprintln(os.Stderr, "  dbharness snapshot config")
-	fmt.Fprintln(os.Stderr, "  dbharness schemas [-s name]")
+	fmt.Fprintln(os.Stderr, "  dbh init [--force]")
+	fmt.Fprintln(os.Stderr, "  dbh test-connection [-s name]")
+	fmt.Fprintln(os.Stderr, "  dbh snapshot")
+	fmt.Fprintln(os.Stderr, "  dbh snapshot config")
+	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
 }
 
 func runInit(args []string) {

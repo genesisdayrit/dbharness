@@ -1,6 +1,6 @@
 {
     "scripts": {
         "setup": "[ -f $CONDUCTOR_ROOT_PATH/.env ] && ln -sf $CONDUCTOR_ROOT_PATH/.env .env; go mod download",
-        "run": "go build ./cmd/dbharness"
+        "run": "go build ./cmd/dbh"
     }
 }

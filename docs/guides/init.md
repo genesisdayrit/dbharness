@@ -1,16 +1,16 @@
 # Init
 
-`dbharness init` sets up a `.dbharness/` folder in the current directory and walks you through configuring your first database connection.
+`dbh init` sets up a `.dbharness/` folder in the current directory and walks you through configuring your first database connection.
 
 ## First-time setup
 
-Running `dbharness init` in a project without an existing `.dbharness/` folder will:
+Running `dbh init` in a project without an existing `.dbharness/` folder will:
 
 1. Create the `.dbharness/` directory with a `config.json`
 2. Prompt you interactively to configure your first connection
 
 ```
-$ dbharness init
+$ dbh init
 Installed .dbharness to /path/to/project/.dbharness
 
 Connection name: my-db
@@ -35,10 +35,10 @@ The connection is tested before saving. If the test fails, nothing is written to
 
 ## Adding more connections
 
-Running `dbharness init` again when `.dbharness/` already exists will prompt you to add another connection:
+Running `dbh init` again when `.dbharness/` already exists will prompt you to add another connection:
 
 ```
-$ dbharness init
+$ dbh init
 .dbharness already exists at /path/to/project/.dbharness
 
 Would you like to add a new connection? (y/n): y
@@ -89,7 +89,7 @@ The following fields are shared across all database types:
 ### SSO (External Browser)
 
 ```
-$ dbharness init
+$ dbh init
 Installed .dbharness to /path/to/project/.dbharness
 
 Connection name: analytics
@@ -113,7 +113,7 @@ Added "analytics" to /path/to/project/.dbharness/config.json
 ### Username & Password
 
 ```
-$ dbharness init
+$ dbh init
 Installed .dbharness to /path/to/project/.dbharness
 
 Connection name: snowflake-svc
@@ -139,7 +139,7 @@ Added "snowflake-svc" to /path/to/project/.dbharness/config.json
 To discard an existing `.dbharness/` folder and start fresh:
 
 ```bash
-dbharness init --force
+dbh init --force
 ```
 
 This deletes the existing `.dbharness/` directory, creates a new one, and prompts for the first connection again.
