@@ -32,7 +32,7 @@ This document describes the `.dbharness/context/` directory structure — what i
 
 - **Underscore-prefixed YAML files** (`_databases.yml`, `_schemas.yml`, `_tables.yml`) are index files that live alongside subdirectories at the same level. The underscore prefix distinguishes index files from subdirectory names.
 - **Directory names** are lowercased and sanitized: `/`, `\`, spaces, and `.` are replaced with `_`.
-- **Connection names** are used as-is for directory names (they are user-chosen during `dbharness init`).
+- **Connection names** are used as-is for directory names (they are user-chosen during `dbh init`).
 
 ## Future Vision (planned)
 

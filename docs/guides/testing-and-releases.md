@@ -5,14 +5,14 @@
 ### Build from source
 
 ```bash
-go build -o dbharness ./cmd/dbharness
+go build -o dbh ./cmd/dbh
 ```
 
-This produces a `dbharness` binary in the current directory. Run it directly:
+This produces a `dbh` binary in the current directory. Run it directly:
 
 ```bash
-./dbharness init
-./dbharness test-connection -s default
+./dbh init
+./dbh test-connection -s default
 ```
 
 ### Install locally via `go install`
@@ -20,42 +20,42 @@ This produces a `dbharness` binary in the current directory. Run it directly:
 From the repo root, this builds and places the binary in `~/go/bin/`:
 
 ```bash
-go install ./cmd/dbharness
+go install ./cmd/dbh
 ```
 
 ### Homebrew vs local build
 
-If you also have dbharness installed via Homebrew, both binaries exist on your
+If you also have dbh installed via Homebrew, both binaries exist on your
 system and can collide. Homebrew typically installs to `/opt/homebrew/bin/`
 (Apple Silicon) or `/usr/local/bin/` (Intel), while `go install` places it in
 `~/go/bin/`. Whichever directory appears first in your `$PATH` wins when you
-run `dbharness` without a full path.
+run `dbh` without a full path.
 
 Check which version is active:
 
 ```bash
-which -a dbharness
+which -a dbh
 # example output:
-#   /opt/homebrew/bin/dbharness    <-- Homebrew (released version)
-#   /Users/you/go/bin/dbharness   <-- local build (dev version)
+#   /opt/homebrew/bin/dbh    <-- Homebrew (released version)
+#   /Users/you/go/bin/dbh   <-- local build (dev version)
 ```
 
 To test your local build without affecting the Homebrew install, use the full path:
 
 ```bash
-~/go/bin/dbharness init
+~/go/bin/dbh init
 ```
 
-To temporarily unlink the Homebrew version so `dbharness` resolves to your
+To temporarily unlink the Homebrew version so `dbh` resolves to your
 local build:
 
 ```bash
-brew unlink dbharness
-# now "dbharness" runs ~/go/bin/dbharness
-dbharness init
+brew unlink dbh
+# now "dbh" runs ~/go/bin/dbh
+dbh init
 
 # when done, restore the Homebrew version
-brew link dbharness
+brew link dbh
 ```
 
 ### Test in an isolated directory
@@ -63,12 +63,12 @@ brew link dbharness
 To avoid touching your real project configs:
 
 ```bash
-mkdir /tmp/dbharness-test && cd /tmp/dbharness-test
-~/go/bin/dbharness init
+mkdir /tmp/dbh-test && cd /tmp/dbh-test
+~/go/bin/dbh init
 # run init again to test the add-database flow
-~/go/bin/dbharness init
+~/go/bin/dbh init
 # clean up
-rm -rf /tmp/dbharness-test
+rm -rf /tmp/dbh-test
 ```
 
 ## Testing a release before tagging
@@ -91,17 +91,17 @@ Check the output:
 ```bash
 ls dist/
 # You'll see:
-#   dbharness_<version>-SNAPSHOT_darwin_arm64.tar.gz
-#   dbharness_<version>-SNAPSHOT_darwin_amd64.tar.gz
-#   dbharness_<version>-SNAPSHOT_linux_arm64.tar.gz
-#   dbharness_<version>-SNAPSHOT_linux_amd64.tar.gz
+#   dbh_<version>-SNAPSHOT_darwin_arm64.tar.gz
+#   dbh_<version>-SNAPSHOT_darwin_amd64.tar.gz
+#   dbh_<version>-SNAPSHOT_linux_arm64.tar.gz
+#   dbh_<version>-SNAPSHOT_linux_amd64.tar.gz
 ```
 
 You can extract and test a specific build:
 
 ```bash
-tar -xzf dist/dbharness_*_darwin_arm64.tar.gz -C /tmp
-/tmp/dbharness init
+tar -xzf dist/dbh_*_darwin_arm64.tar.gz -C /tmp
+/tmp/dbh init
 ```
 
 ### Install GoReleaser (if needed)
@@ -132,7 +132,7 @@ git push origin v0.x.x
 4. Users receive the update via:
 
 ```bash
-brew upgrade dbharness
+brew upgrade dbh
 ```
 
 ### Required secrets

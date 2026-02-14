@@ -1,6 +1,6 @@
 # .dbharness
 
-This folder is installed by the dbharness CLI.
+This folder is installed by the dbh CLI.
 
 ## Structure
 
@@ -21,7 +21,7 @@ This folder is installed by the dbharness CLI.
 
 ## Commands
 
-- `dbharness init` — Set up this directory and configure database connections
-- `dbharness test-connection -s <name>` — Test a database connection
-- `dbharness schemas [-s <name>]` — Generate schema context files for LLM discovery
-- `dbharness snapshot` — Back up this directory
+- `dbh init` — Set up this directory and configure database connections
+- `dbh test-connection -s <name>` — Test a database connection
+- `dbh schemas [-s <name>]` — Generate schema context files for LLM discovery
+- `dbh snapshot` — Back up this directory
