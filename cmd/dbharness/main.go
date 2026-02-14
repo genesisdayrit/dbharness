@@ -282,14 +282,21 @@ func runSchemas(args []string) {
 		os.Exit(1)
 	}
 
-	contextDir := filepath.Join(baseDir, "context", dbCfg.Name)
-	absPath, _ := filepath.Abs(contextDir)
+	dbName := sanitizeSchemaName(dbCfg.Database)
+	if dbName == "" {
+		dbName = "_default"
+	}
+
+	databasesDir := filepath.Join(baseDir, "context", "connections", dbCfg.Name, "databases")
+	schemasDir := filepath.Join(databasesDir, dbName, "schemas")
+	absPath, _ := filepath.Abs(schemasDir)
 	fmt.Printf("Schema context files written to %s\n", absPath)
 	fmt.Println()
 	fmt.Println("Files generated:")
-	fmt.Printf("  %s/schemas.yml\n", contextDir)
+	fmt.Printf("  %s/_databases.yml\n", databasesDir)
+	fmt.Printf("  %s/_schemas.yml\n", schemasDir)
 	for _, s := range schemas {
-		fmt.Printf("  %s/schemas/%s/tables.yml\n", contextDir, sanitizeSchemaName(s.Name))
+		fmt.Printf("  %s/%s/_tables.yml\n", schemasDir, sanitizeSchemaName(s.Name))
 	}
 }
 
