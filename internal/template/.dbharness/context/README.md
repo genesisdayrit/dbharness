@@ -8,18 +8,23 @@ After running `dbharness schemas`, the following structure is created for each c
 
 ```
 context/
-  <connection-name>/
-    schemas.yml                          # Overview of all schemas in the database
-    schemas/
-      <schema-name>/
-        tables.yml                       # All tables and views in this schema
+  connections/
+    <connection-name>/
+      databases/
+        _databases.yml                   # List of databases in this connection
+        <database-name>/
+          schemas/
+            _schemas.yml                 # Overview of all schemas in the database
+            <schema-name>/
+              _tables.yml                # All tables and views in this schema
 ```
 
 ## How to use (for LLMs / AI agents)
 
-1. Start with `schemas.yml` to see which schemas exist and how many tables each contains
-2. Navigate into `schemas/<schema-name>/tables.yml` for detailed table listings
-3. Use the `description` fields (when populated) for additional context about what each schema or table contains
+1. Start with `_databases.yml` to see which databases exist under this connection
+2. Navigate into `<database>/schemas/_schemas.yml` to see which schemas exist and how many tables each contains
+3. Navigate into `<schema>/_tables.yml` for detailed table listings
+4. Use the `description` fields (when populated) for additional context about what each schema or table contains
 
 ## Generating context files
 

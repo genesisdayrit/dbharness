@@ -6,13 +6,17 @@ This folder is installed by the dbharness CLI.
 
 ```
 .dbharness/
-  config.json         # Database connection configuration
-  context/            # LLM-friendly schema context files (generated)
-    <connection>/
-      schemas.yml     # All schemas with table counts
-      schemas/
-        <schema>/
-          tables.yml  # Tables and views in this schema
+  config.json                                   # Database connection configuration
+  context/                                      # LLM-friendly schema context files (generated)
+    connections/
+      <connection>/
+        databases/
+          _databases.yml                        # List of databases in this connection
+          <database>/
+            schemas/
+              _schemas.yml                      # All schemas with table counts
+              <schema>/
+                _tables.yml                     # Tables and views in this schema
 ```
 
 ## Commands

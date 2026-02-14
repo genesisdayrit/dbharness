@@ -50,7 +50,7 @@ dbharness init --force
 
 ### `dbharness schemas`
 
-Connects to a database and generates LLM-friendly schema context files in `.dbharness/context/`:
+Connects to a database and generates LLM-friendly schema context files in `.dbharness/context/connections/`:
 
 ```bash
 # Use the primary connection
@@ -63,13 +63,15 @@ dbharness schemas -s my-db
 This creates a nested directory structure:
 
 ```
-.dbharness/context/my-db/
-  schemas.yml                     # Overview of all schemas
-  schemas/
-    public/
-      tables.yml                  # Tables in the "public" schema
-    analytics/
-      tables.yml                  # Tables in the "analytics" schema
+.dbharness/context/connections/my-db/databases/
+  _databases.yml                  # List of databases in this connection
+  myapp/
+    schemas/
+      _schemas.yml                # Overview of all schemas
+      public/
+        _tables.yml               # Tables in the "public" schema
+      analytics/
+        _tables.yml               # Tables in the "analytics" schema
 ```
 
 The YAML files are designed for AI coding agents (Claude Code, Cursor, etc.) to discover and explore database structures. Re-running the command refreshes the files with the latest schema data.
