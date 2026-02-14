@@ -42,6 +42,37 @@ func TestGenerate_WritesDefaultDatabaseFieldWhenProvided(t *testing.T) {
 	}
 }
 
+func TestGenerate_UsesDefaultSentinelWhenDatabaseMissing(t *testing.T) {
+	baseDir := t.TempDir()
+
+	schemas := []discovery.SchemaInfo{
+		{
+			Name: "public",
+			Tables: []discovery.TableInfo{
+				{Name: "users", TableType: "BASE TABLE"},
+			},
+		},
+	}
+
+	opts := Options{
+		ConnectionName: "my-db",
+		DatabaseType:   "postgres",
+		BaseDir:        baseDir,
+	}
+
+	if err := Generate(schemas, opts); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	df, raw := readDatabasesFile(t, baseDir, "my-db")
+	if df.DefaultDatabase != "_default" {
+		t.Fatalf("default database = %q, want %q", df.DefaultDatabase, "_default")
+	}
+	if !strings.Contains(raw, "default_database: _default") {
+		t.Fatalf("expected _databases.yml to contain default_database fallback, got:\n%s", raw)
+	}
+}
+
 func TestUpdateDatabasesFile_WritesDefaultDatabaseFieldWhenProvided(t *testing.T) {
 	baseDir := t.TempDir()
 
@@ -65,7 +96,7 @@ func TestUpdateDatabasesFile_WritesDefaultDatabaseFieldWhenProvided(t *testing.T
 	}
 }
 
-func TestUpdateDatabasesFile_OmitsDefaultDatabaseFieldWhenEmpty(t *testing.T) {
+func TestUpdateDatabasesFile_UsesFirstDiscoveredDatabaseWhenDefaultMissing(t *testing.T) {
 	baseDir := t.TempDir()
 
 	opts := Options{
@@ -79,11 +110,44 @@ func TestUpdateDatabasesFile_OmitsDefaultDatabaseFieldWhenEmpty(t *testing.T) {
 	}
 
 	df, raw := readDatabasesFile(t, baseDir, "warehouse")
-	if df.DefaultDatabase != "" {
-		t.Fatalf("default database = %q, want empty", df.DefaultDatabase)
+	if df.DefaultDatabase != "core" {
+		t.Fatalf("default database = %q, want %q", df.DefaultDatabase, "core")
 	}
-	if strings.Contains(raw, "default_database:") {
-		t.Fatalf("did not expect _databases.yml to contain default_database field, got:\n%s", raw)
+	if !strings.Contains(raw, "default_database: core") {
+		t.Fatalf("expected _databases.yml to contain fallback default_database field, got:\n%s", raw)
+	}
+}
+
+func TestUpdateDatabasesFile_PreservesExistingDefaultWhenConfigDefaultMissing(t *testing.T) {
+	baseDir := t.TempDir()
+
+	initialOpts := Options{
+		ConnectionName: "warehouse",
+		DatabaseName:   "reporting",
+		DatabaseType:   "snowflake",
+		BaseDir:        baseDir,
+	}
+
+	if _, err := UpdateDatabasesFile([]string{"core", "sandbox"}, initialOpts); err != nil {
+		t.Fatalf("initial UpdateDatabasesFile() error = %v", err)
+	}
+
+	updateOpts := Options{
+		ConnectionName: "warehouse",
+		DatabaseType:   "snowflake",
+		BaseDir:        baseDir,
+	}
+
+	if _, err := UpdateDatabasesFile([]string{"core", "sandbox", "zeta"}, updateOpts); err != nil {
+		t.Fatalf("second UpdateDatabasesFile() error = %v", err)
+	}
+
+	df, raw := readDatabasesFile(t, baseDir, "warehouse")
+	if df.DefaultDatabase != "reporting" {
+		t.Fatalf("default database = %q, want %q", df.DefaultDatabase, "reporting")
+	}
+	if !strings.Contains(raw, "default_database: reporting") {
+		t.Fatalf("expected _databases.yml to preserve default_database field, got:\n%s", raw)
 	}
 }
 

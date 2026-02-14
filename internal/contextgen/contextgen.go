@@ -24,7 +24,7 @@ import (
 type DatabasesFile struct {
 	Connection      string         `yaml:"connection"`
 	DatabaseType    string         `yaml:"database_type"`
-	DefaultDatabase string         `yaml:"default_database,omitempty"`
+	DefaultDatabase string         `yaml:"default_database"`
 	GeneratedAt     string         `yaml:"generated_at"`
 	Databases       []DatabaseItem `yaml:"databases"`
 }
@@ -87,10 +87,8 @@ type Options struct {
 func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	dbName := sanitizeName(opts.DatabaseName)
-	if dbName == "" {
-		dbName = "_default"
-	}
+	defaultDatabase := resolveDefaultDatabase(opts.DatabaseName, "", nil)
+	dbName := sanitizeName(defaultDatabase)
 
 	databasesDir := filepath.Join(opts.BaseDir, "context", "connections", opts.ConnectionName, "databases")
 	if err := os.MkdirAll(databasesDir, 0o755); err != nil {
@@ -101,9 +99,9 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	df := DatabasesFile{
 		Connection:      opts.ConnectionName,
 		DatabaseType:    opts.DatabaseType,
-		DefaultDatabase: opts.DatabaseName,
+		DefaultDatabase: defaultDatabase,
 		GeneratedAt:     now,
-		Databases:       []DatabaseItem{{Name: opts.DatabaseName}},
+		Databases:       []DatabaseItem{{Name: defaultDatabase}},
 	}
 
 	databasesPath := filepath.Join(databasesDir, "_databases.yml")
@@ -119,7 +117,7 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	// ---- _schemas.yml ----
 	sf := SchemasFile{
 		Connection:   opts.ConnectionName,
-		Database:     opts.DatabaseName,
+		Database:     defaultDatabase,
 		DatabaseType: opts.DatabaseType,
 		GeneratedAt:  now,
 	}
@@ -156,7 +154,7 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 		tf := TablesFile{
 			Schema:       s.Name,
 			Connection:   opts.ConnectionName,
-			Database:     opts.DatabaseName,
+			Database:     defaultDatabase,
 			DatabaseType: opts.DatabaseType,
 			GeneratedAt:  now,
 		}
@@ -226,10 +224,12 @@ func UpdateDatabasesFile(discoveredDBs []string, opts Options) (added []string, 
 		merged = append(merged, DatabaseItem{Name: name})
 	}
 
+	defaultDatabase := resolveDefaultDatabase(opts.DatabaseName, existing.DefaultDatabase, merged)
+
 	df := DatabasesFile{
 		Connection:      opts.ConnectionName,
 		DatabaseType:    opts.DatabaseType,
-		DefaultDatabase: opts.DatabaseName,
+		DefaultDatabase: defaultDatabase,
 		GeneratedAt:     now,
 		Databases:       merged,
 	}
@@ -317,6 +317,22 @@ func tablesHeader(opts Options, schemaName string) string {
 func isView(tableType string) bool {
 	upper := strings.ToUpper(tableType)
 	return strings.Contains(upper, "VIEW")
+}
+
+// resolveDefaultDatabase ensures default_database in _databases.yml is never blank.
+func resolveDefaultDatabase(configured, existing string, databases []DatabaseItem) string {
+	if name := strings.TrimSpace(configured); name != "" {
+		return name
+	}
+	if name := strings.TrimSpace(existing); name != "" {
+		return name
+	}
+	for _, db := range databases {
+		if name := strings.TrimSpace(db.Name); name != "" {
+			return name
+		}
+	}
+	return "_default"
 }
 
 // sanitizeName replaces characters that are not safe for directory names.

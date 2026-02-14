@@ -30,8 +30,12 @@ The command creates a nested directory structure inside `.dbharness/context/conn
 
 ### _databases.yml
 
-Lists the databases available under this connection. If the connection config
-has a default database, it is included as `default_database`:
+Lists the databases available under this connection. `default_database` is
+always present:
+
+- If the connection config has a default database, that value is used.
+- Otherwise, dbh selects a fallback default (the first discovered database, or
+  `_default` when none are available).
 
 ```yaml
 connection: my-db
