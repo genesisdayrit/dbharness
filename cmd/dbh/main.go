@@ -336,21 +336,20 @@ func runUpdateDatabases(args []string) {
 		}
 	}
 
-	if dbCfg.Type != "snowflake" {
-		fmt.Fprintf(os.Stderr, "update-databases: connection type %q is not supported at this time (only snowflake validated)\n", dbCfg.Type)
-		os.Exit(1)
-	}
-
 	fmt.Printf("Discovering databases for connection %q (%s)...\n", dbCfg.Name, dbCfg.Type)
-	if dbCfg.Authenticator == "externalbrowser" {
+	if dbCfg.Type == "snowflake" && dbCfg.Authenticator == "externalbrowser" {
 		fmt.Println("Opening browser for SSO authentication...")
 	}
 
 	discoveryCfg := discovery.DatabaseConfig{
 		Type:          dbCfg.Type,
-		Account:       dbCfg.Account,
+		Host:          dbCfg.Host,
+		Port:          dbCfg.Port,
+		Database:      dbCfg.Database,
 		User:          dbCfg.User,
 		Password:      dbCfg.Password,
+		SSLMode:       dbCfg.SSLMode,
+		Account:       dbCfg.Account,
 		Role:          dbCfg.Role,
 		Warehouse:     dbCfg.Warehouse,
 		Authenticator: dbCfg.Authenticator,

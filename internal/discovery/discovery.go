@@ -71,13 +71,15 @@ func New(cfg DatabaseConfig) (Discoverer, error) {
 }
 
 // NewDatabaseLister creates a DatabaseLister for the given database
-// configuration. Only Snowflake is supported at this time.
+// configuration.
 func NewDatabaseLister(cfg DatabaseConfig) (DatabaseLister, error) {
 	switch cfg.Type {
+	case "postgres":
+		return newPostgresDatabaseLister(cfg)
 	case "snowflake":
 		return newSnowflakeDatabaseLister(cfg)
 	default:
-		return nil, fmt.Errorf("update-databases is not supported for connection type %q at this time (only snowflake validated)", cfg.Type)
+		return nil, fmt.Errorf("update-databases is not supported for connection type %q", cfg.Type)
 	}
 }
 

@@ -12,6 +12,10 @@ type postgresDiscoverer struct {
 	db *sql.DB
 }
 
+type postgresDatabaseLister struct {
+	db *sql.DB
+}
+
 func newPostgres(cfg DatabaseConfig) (*postgresDiscoverer, error) {
 	sslMode := cfg.SSLMode
 	if sslMode == "" {
@@ -28,6 +32,59 @@ func newPostgres(cfg DatabaseConfig) (*postgresDiscoverer, error) {
 		return nil, err
 	}
 	return &postgresDiscoverer{db: db}, nil
+}
+
+func newPostgresDatabaseLister(cfg DatabaseConfig) (*postgresDatabaseLister, error) {
+	sslMode := cfg.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+
+	// Connect to the "postgres" default database to list all databases.
+	dbName := cfg.Database
+	if dbName == "" {
+		dbName = "postgres"
+	}
+
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, dbName, sslMode,
+	)
+
+	db, err := openDB("postgres", connStr)
+	if err != nil {
+		return nil, err
+	}
+	return &postgresDatabaseLister{db: db}, nil
+}
+
+func (p *postgresDatabaseLister) ListDatabases(ctx context.Context) ([]string, error) {
+	query := `
+		SELECT datname
+		FROM pg_database
+		WHERE datistemplate = false
+		ORDER BY datname
+	`
+
+	rows, err := p.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query postgres databases: %w", err)
+	}
+	defer rows.Close()
+
+	var databases []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan database row: %w", err)
+		}
+		databases = append(databases, name)
+	}
+	return databases, rows.Err()
+}
+
+func (p *postgresDatabaseLister) Close() error {
+	return p.db.Close()
 }
 
 func (p *postgresDiscoverer) Discover(ctx context.Context) ([]SchemaInfo, error) {
