@@ -22,10 +22,11 @@ import (
 // DatabasesFile is the top-level _databases.yml that lists databases
 // available under a connection.
 type DatabasesFile struct {
-	Connection   string         `yaml:"connection"`
-	DatabaseType string         `yaml:"database_type"`
-	GeneratedAt  string         `yaml:"generated_at"`
-	Databases    []DatabaseItem `yaml:"databases"`
+	Connection      string         `yaml:"connection"`
+	DatabaseType    string         `yaml:"database_type"`
+	DefaultDatabase string         `yaml:"default_database,omitempty"`
+	GeneratedAt     string         `yaml:"generated_at"`
+	Databases       []DatabaseItem `yaml:"databases"`
 }
 
 // DatabaseItem is one entry in the _databases.yml file.
@@ -55,18 +56,18 @@ type SchemaItem struct {
 // TablesFile is written inside each <schema>/_tables.yml and provides
 // a detailed listing of every table or view in that schema.
 type TablesFile struct {
-	Schema       string         `yaml:"schema"`
-	Connection   string         `yaml:"connection"`
-	Database     string         `yaml:"database"`
-	DatabaseType string         `yaml:"database_type"`
-	GeneratedAt  string         `yaml:"generated_at"`
-	Tables       []TablesEntry  `yaml:"tables"`
+	Schema       string        `yaml:"schema"`
+	Connection   string        `yaml:"connection"`
+	Database     string        `yaml:"database"`
+	DatabaseType string        `yaml:"database_type"`
+	GeneratedAt  string        `yaml:"generated_at"`
+	Tables       []TablesEntry `yaml:"tables"`
 }
 
 // TablesEntry is one row in a tables.yml file.
 type TablesEntry struct {
 	Name        string `yaml:"name"`
-	Type        string `yaml:"type"` // BASE TABLE, VIEW, etc.
+	Type        string `yaml:"type"`        // BASE TABLE, VIEW, etc.
 	Description string `yaml:"description"` // blank placeholder
 }
 
@@ -98,10 +99,11 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 
 	// ---- _databases.yml ----
 	df := DatabasesFile{
-		Connection:   opts.ConnectionName,
-		DatabaseType: opts.DatabaseType,
-		GeneratedAt:  now,
-		Databases:    []DatabaseItem{{Name: opts.DatabaseName}},
+		Connection:      opts.ConnectionName,
+		DatabaseType:    opts.DatabaseType,
+		DefaultDatabase: opts.DatabaseName,
+		GeneratedAt:     now,
+		Databases:       []DatabaseItem{{Name: opts.DatabaseName}},
 	}
 
 	databasesPath := filepath.Join(databasesDir, "_databases.yml")
@@ -225,10 +227,11 @@ func UpdateDatabasesFile(discoveredDBs []string, opts Options) (added []string, 
 	}
 
 	df := DatabasesFile{
-		Connection:   opts.ConnectionName,
-		DatabaseType: opts.DatabaseType,
-		GeneratedAt:  now,
-		Databases:    merged,
+		Connection:      opts.ConnectionName,
+		DatabaseType:    opts.DatabaseType,
+		DefaultDatabase: opts.DatabaseName,
+		GeneratedAt:     now,
+		Databases:       merged,
 	}
 
 	if err := writeYAMLWithHeader(databasesPath, df, databasesHeader(opts)); err != nil {

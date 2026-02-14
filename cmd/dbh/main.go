@@ -384,6 +384,7 @@ func runUpdateDatabases(args []string) {
 
 	opts := contextgen.Options{
 		ConnectionName: dbCfg.Name,
+		DatabaseName:   dbCfg.Database,
 		DatabaseType:   dbCfg.Type,
 		BaseDir:        baseDir,
 	}

@@ -30,11 +30,13 @@ The command creates a nested directory structure inside `.dbharness/context/conn
 
 ### _databases.yml
 
-Lists the databases available under this connection:
+Lists the databases available under this connection. If the connection config
+has a default database, it is included as `default_database`:
 
 ```yaml
 connection: my-db
 database_type: postgres
+default_database: myapp
 generated_at: "2026-02-12T15:30:00Z"
 databases:
   - name: myapp
