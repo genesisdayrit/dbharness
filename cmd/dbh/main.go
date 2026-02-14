@@ -38,6 +38,8 @@ func main() {
 		runSnapshot(os.Args[2:])
 	case "schemas":
 		runSchemas(os.Args[2:])
+	case "update-databases":
+		runUpdateDatabases(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -51,6 +53,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh snapshot")
 	fmt.Fprintln(os.Stderr, "  dbh snapshot config")
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
+	fmt.Fprintln(os.Stderr, "  dbh update-databases [-s name]")
 }
 
 func runInit(args []string) {
@@ -297,6 +300,112 @@ func runSchemas(args []string) {
 	fmt.Printf("  %s/_schemas.yml\n", schemasDir)
 	for _, s := range schemas {
 		fmt.Printf("  %s/%s/_tables.yml\n", schemasDir, sanitizeSchemaName(s.Name))
+	}
+}
+
+func runUpdateDatabases(args []string) {
+	flags := flag.NewFlagSet("update-databases", flag.ExitOnError)
+	shortName := flags.String("s", "", "Connection name from config.json.")
+	longName := flags.String("name", "", "Connection name from config.json.")
+	_ = flags.Parse(args)
+
+	name := *shortName
+	if name == "" {
+		name = *longName
+	}
+
+	baseDir := filepath.Join(".", ".dbharness")
+	cfg, err := readConfig(filepath.Join(baseDir, "config.json"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	var dbCfg databaseConfig
+	if name == "" {
+		dbCfg, err = findPrimaryConnection(cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	} else {
+		dbCfg, err = findDatabaseConfig(cfg, name)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
+	if dbCfg.Type != "snowflake" {
+		fmt.Fprintf(os.Stderr, "update-databases: connection type %q is not supported at this time (only snowflake validated)\n", dbCfg.Type)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Discovering databases for connection %q (%s)...\n", dbCfg.Name, dbCfg.Type)
+	if dbCfg.Authenticator == "externalbrowser" {
+		fmt.Println("Opening browser for SSO authentication...")
+	}
+
+	discoveryCfg := discovery.DatabaseConfig{
+		Type:          dbCfg.Type,
+		Account:       dbCfg.Account,
+		User:          dbCfg.User,
+		Password:      dbCfg.Password,
+		Role:          dbCfg.Role,
+		Warehouse:     dbCfg.Warehouse,
+		Authenticator: dbCfg.Authenticator,
+	}
+
+	lister, err := discovery.NewDatabaseLister(discoveryCfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "connect: %v\n", err)
+		os.Exit(1)
+	}
+	defer lister.Close()
+
+	timeout := 60 * time.Second
+	if dbCfg.Authenticator == "externalbrowser" {
+		timeout = 120 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	databases, err := lister.ListDatabases(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "list databases: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Found %d database(s)\n", len(databases))
+	for _, db := range databases {
+		fmt.Printf("  %s\n", db)
+	}
+	fmt.Println()
+
+	opts := contextgen.Options{
+		ConnectionName: dbCfg.Name,
+		DatabaseType:   dbCfg.Type,
+		BaseDir:        baseDir,
+	}
+
+	added, err := contextgen.UpdateDatabasesFile(databases, opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "update databases file: %v\n", err)
+		os.Exit(1)
+	}
+
+	databasesDir := filepath.Join(baseDir, "context", "connections", dbCfg.Name, "databases")
+	absPath, _ := filepath.Abs(filepath.Join(databasesDir, "_databases.yml"))
+
+	if len(added) == 0 {
+		fmt.Printf("No new databases found. %s is up to date.\n", absPath)
+	} else {
+		fmt.Printf("Added %d new database(s):\n", len(added))
+		for _, name := range added {
+			fmt.Printf("  + %s\n", name)
+		}
+		fmt.Printf("\nDatabases file written to %s\n", absPath)
 	}
 }
 

@@ -28,6 +28,15 @@ type Discoverer interface {
 	Close() error
 }
 
+// DatabaseLister retrieves the list of databases available in a connection.
+type DatabaseLister interface {
+	// ListDatabases returns the names of all databases accessible to the
+	// current role.
+	ListDatabases(ctx context.Context) ([]string, error)
+	// Close releases the underlying database connection.
+	Close() error
+}
+
 // DatabaseConfig holds the connection parameters needed by Discoverer
 // implementations. It mirrors the fields from the CLI config.
 type DatabaseConfig struct {
@@ -58,6 +67,17 @@ func New(cfg DatabaseConfig) (Discoverer, error) {
 		return newSnowflake(cfg)
 	default:
 		return nil, fmt.Errorf("unsupported database type %q", cfg.Type)
+	}
+}
+
+// NewDatabaseLister creates a DatabaseLister for the given database
+// configuration. Only Snowflake is supported at this time.
+func NewDatabaseLister(cfg DatabaseConfig) (DatabaseLister, error) {
+	switch cfg.Type {
+	case "snowflake":
+		return newSnowflakeDatabaseLister(cfg)
+	default:
+		return nil, fmt.Errorf("update-databases is not supported for connection type %q at this time (only snowflake validated)", cfg.Type)
 	}
 }
 
