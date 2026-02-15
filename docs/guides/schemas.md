@@ -28,27 +28,9 @@ The command creates a nested directory structure inside `.dbharness/context/conn
         _tables.yml               # All tables and views in the "analytics" schema
 ```
 
-### _databases.yml
-
-Lists the databases available under this connection. `default_database` is
-always present:
-
-- If the connection config has a default database, that value is used.
-- If no default is set and exactly one database is available, that database is
-  used and saved to the connection config.
-- If no default is set and multiple databases are available, `dbh
-  update-databases` prompts you to pick one (alphabetical list with arrow-key
-  selection) and saves it to the connection config.
-- If no databases are available, `_default` is used.
-
-```yaml
-connection: my-db
-database_type: postgres
-default_database: myapp
-generated_at: "2026-02-12T15:30:00Z"
-databases:
-  - name: myapp
-```
+The `_databases.yml` file is documented in detail in
+[`docs/guides/databases.md`](./databases.md), including how
+`default_database` is chosen and persisted.
 
 ### _schemas.yml
 
