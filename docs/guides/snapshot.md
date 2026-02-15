@@ -42,4 +42,5 @@ Snapshots are organized by timestamp in `yyyymmdd_hhmm_ss` format:
 
 - The `.dbharness-snapshots/` directory is created automatically on the first snapshot.
 - `.dbharness-snapshots/` is included in the project `.gitignore` to prevent committing database credentials.
+- `dbh init --force` also writes a full snapshot to this same timestamped structure before overwriting an existing `.dbharness/` directory.
 - A `.dbharness/` directory must exist before snapshotting. Run `dbh init` first if you haven't already.

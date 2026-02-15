@@ -142,7 +142,7 @@ To discard an existing `.dbharness/` folder and start fresh:
 dbh init --force
 ```
 
-This deletes the existing `.dbharness/` directory, creates a new one, and prompts for the first connection again.
+When `.dbharness/` already exists, this first creates a full timestamped backup in `.dbharness-snapshots/<yyyymmdd_hhmm_ss>/`, then deletes `.dbharness/`, creates a new one, and prompts for the first connection again.
 
 ## Config file
 

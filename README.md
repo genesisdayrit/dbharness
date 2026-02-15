@@ -50,6 +50,8 @@ Use `--force` to overwrite an existing `.dbharness/` folder and start fresh:
 dbh init --force
 ```
 
+When `.dbharness/` already exists, `dbh init --force` creates a full timestamped backup in `.dbharness-snapshots/<yyyymmdd_hhmm_ss>/` before overwriting. The backup includes the entire `.dbharness/` directory, not just `config.json`.
+
 ### `dbh schemas`
 
 Connects to a database and generates LLM-friendly schema context files in `.dbharness/context/connections/`:
