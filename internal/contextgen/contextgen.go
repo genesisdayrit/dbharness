@@ -22,10 +22,11 @@ import (
 // DatabasesFile is the top-level _databases.yml that lists databases
 // available under a connection.
 type DatabasesFile struct {
-	Connection   string         `yaml:"connection"`
-	DatabaseType string         `yaml:"database_type"`
-	GeneratedAt  string         `yaml:"generated_at"`
-	Databases    []DatabaseItem `yaml:"databases"`
+	Connection      string         `yaml:"connection"`
+	DatabaseType    string         `yaml:"database_type"`
+	DefaultDatabase string         `yaml:"default_database"`
+	GeneratedAt     string         `yaml:"generated_at"`
+	Databases       []DatabaseItem `yaml:"databases"`
 }
 
 // DatabaseItem is one entry in the _databases.yml file.
@@ -55,18 +56,18 @@ type SchemaItem struct {
 // TablesFile is written inside each <schema>/_tables.yml and provides
 // a detailed listing of every table or view in that schema.
 type TablesFile struct {
-	Schema       string         `yaml:"schema"`
-	Connection   string         `yaml:"connection"`
-	Database     string         `yaml:"database"`
-	DatabaseType string         `yaml:"database_type"`
-	GeneratedAt  string         `yaml:"generated_at"`
-	Tables       []TablesEntry  `yaml:"tables"`
+	Schema       string        `yaml:"schema"`
+	Connection   string        `yaml:"connection"`
+	Database     string        `yaml:"database"`
+	DatabaseType string        `yaml:"database_type"`
+	GeneratedAt  string        `yaml:"generated_at"`
+	Tables       []TablesEntry `yaml:"tables"`
 }
 
 // TablesEntry is one row in a tables.yml file.
 type TablesEntry struct {
 	Name        string `yaml:"name"`
-	Type        string `yaml:"type"` // BASE TABLE, VIEW, etc.
+	Type        string `yaml:"type"`        // BASE TABLE, VIEW, etc.
 	Description string `yaml:"description"` // blank placeholder
 }
 
@@ -86,10 +87,10 @@ type Options struct {
 func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	dbName := sanitizeName(opts.DatabaseName)
-	if dbName == "" {
-		dbName = "_default"
-	}
+	defaultDatabase := resolveDefaultDatabase(opts.DatabaseName, nil)
+	dbName := sanitizeName(defaultDatabase)
+	headerOpts := opts
+	headerOpts.DatabaseName = defaultDatabase
 
 	databasesDir := filepath.Join(opts.BaseDir, "context", "connections", opts.ConnectionName, "databases")
 	if err := os.MkdirAll(databasesDir, 0o755); err != nil {
@@ -98,14 +99,15 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 
 	// ---- _databases.yml ----
 	df := DatabasesFile{
-		Connection:   opts.ConnectionName,
-		DatabaseType: opts.DatabaseType,
-		GeneratedAt:  now,
-		Databases:    []DatabaseItem{{Name: opts.DatabaseName}},
+		Connection:      opts.ConnectionName,
+		DatabaseType:    opts.DatabaseType,
+		DefaultDatabase: defaultDatabase,
+		GeneratedAt:     now,
+		Databases:       []DatabaseItem{{Name: defaultDatabase}},
 	}
 
 	databasesPath := filepath.Join(databasesDir, "_databases.yml")
-	if err := writeYAMLWithHeader(databasesPath, df, databasesHeader(opts)); err != nil {
+	if err := writeYAMLWithHeader(databasesPath, df, databasesHeader(headerOpts)); err != nil {
 		return fmt.Errorf("write _databases.yml: %w", err)
 	}
 
@@ -117,7 +119,7 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	// ---- _schemas.yml ----
 	sf := SchemasFile{
 		Connection:   opts.ConnectionName,
-		Database:     opts.DatabaseName,
+		Database:     defaultDatabase,
 		DatabaseType: opts.DatabaseType,
 		GeneratedAt:  now,
 	}
@@ -140,7 +142,7 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	}
 
 	schemasPath := filepath.Join(schemasDir, "_schemas.yml")
-	if err := writeYAMLWithHeader(schemasPath, sf, schemasHeader(opts)); err != nil {
+	if err := writeYAMLWithHeader(schemasPath, sf, schemasHeader(headerOpts)); err != nil {
 		return fmt.Errorf("write _schemas.yml: %w", err)
 	}
 
@@ -154,7 +156,7 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 		tf := TablesFile{
 			Schema:       s.Name,
 			Connection:   opts.ConnectionName,
-			Database:     opts.DatabaseName,
+			Database:     defaultDatabase,
 			DatabaseType: opts.DatabaseType,
 			GeneratedAt:  now,
 		}
@@ -167,7 +169,7 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 		}
 
 		tablesPath := filepath.Join(schemaDir, "_tables.yml")
-		if err := writeYAMLWithHeader(tablesPath, tf, tablesHeader(opts, s.Name)); err != nil {
+		if err := writeYAMLWithHeader(tablesPath, tf, tablesHeader(headerOpts, s.Name)); err != nil {
 			return fmt.Errorf("write _tables.yml for %q: %w", s.Name, err)
 		}
 	}
@@ -224,11 +226,14 @@ func UpdateDatabasesFile(discoveredDBs []string, opts Options) (added []string, 
 		merged = append(merged, DatabaseItem{Name: name})
 	}
 
+	defaultDatabase := resolveDefaultDatabase(opts.DatabaseName, merged)
+
 	df := DatabasesFile{
-		Connection:   opts.ConnectionName,
-		DatabaseType: opts.DatabaseType,
-		GeneratedAt:  now,
-		Databases:    merged,
+		Connection:      opts.ConnectionName,
+		DatabaseType:    opts.DatabaseType,
+		DefaultDatabase: defaultDatabase,
+		GeneratedAt:     now,
+		Databases:       merged,
 	}
 
 	if err := writeYAMLWithHeader(databasesPath, df, databasesHeader(opts)); err != nil {
@@ -314,6 +319,21 @@ func tablesHeader(opts Options, schemaName string) string {
 func isView(tableType string) bool {
 	upper := strings.ToUpper(tableType)
 	return strings.Contains(upper, "VIEW")
+}
+
+// resolveDefaultDatabase ensures default_database in _databases.yml is never blank.
+// The configured value always wins. If there is exactly one database entry,
+// that single entry is used as a fallback. Otherwise "_default" is used.
+func resolveDefaultDatabase(configured string, databases []DatabaseItem) string {
+	if name := strings.TrimSpace(configured); name != "" {
+		return name
+	}
+	if len(databases) == 1 {
+		if name := strings.TrimSpace(databases[0].Name); name != "" {
+			return name
+		}
+	}
+	return "_default"
 }
 
 // sanitizeName replaces characters that are not safe for directory names.

@@ -28,17 +28,9 @@ The command creates a nested directory structure inside `.dbharness/context/conn
         _tables.yml               # All tables and views in the "analytics" schema
 ```
 
-### _databases.yml
-
-Lists the databases available under this connection:
-
-```yaml
-connection: my-db
-database_type: postgres
-generated_at: "2026-02-12T15:30:00Z"
-databases:
-  - name: myapp
-```
+The `_databases.yml` file is documented in detail in
+[`docs/guides/databases.md`](./databases.md), including how
+`default_database` is chosen and persisted.
 
 ### _schemas.yml
 

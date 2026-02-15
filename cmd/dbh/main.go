@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -315,7 +316,8 @@ func runUpdateDatabases(args []string) {
 	}
 
 	baseDir := filepath.Join(".", ".dbharness")
-	cfg, err := readConfig(filepath.Join(baseDir, "config.json"))
+	configPath := filepath.Join(baseDir, "config.json")
+	cfg, err := readConfig(configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -375,6 +377,7 @@ func runUpdateDatabases(args []string) {
 		fmt.Fprintf(os.Stderr, "list databases: %v\n", err)
 		os.Exit(1)
 	}
+	databases = normalizeDatabaseNames(databases)
 
 	fmt.Printf("Found %d database(s)\n", len(databases))
 	for _, db := range databases {
@@ -382,8 +385,46 @@ func runUpdateDatabases(args []string) {
 	}
 	fmt.Println()
 
+	defaultDatabase := strings.TrimSpace(dbCfg.Database)
+	if defaultDatabase == "" {
+		switch len(databases) {
+		case 0:
+			defaultDatabase = "_default"
+			fmt.Println("No default database is configured and no databases were discovered.")
+			fmt.Println(`Using "_default" in _databases.yml for now.`)
+		case 1:
+			defaultDatabase = databases[0]
+			fmt.Printf("No default database configured; using the only discovered database %q.\n", defaultDatabase)
+		default:
+			fmt.Printf("No default database configured for connection %q.\n", dbCfg.Name)
+			defaultDatabase, err = promptSelectRequired("Select a default database", databases)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "select default database: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		if defaultDatabase != "_default" {
+			updated, err := setConnectionDefaultDatabase(&cfg, dbCfg.Name, defaultDatabase)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			if updated {
+				if err := writeConfig(configPath, cfg); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
+				absConfigPath, _ := filepath.Abs(configPath)
+				fmt.Printf("Saved default database %q to %s\n\n", defaultDatabase, absConfigPath)
+			}
+		}
+	}
+	dbCfg.Database = defaultDatabase
+
 	opts := contextgen.Options{
 		ConnectionName: dbCfg.Name,
+		DatabaseName:   dbCfg.Database,
 		DatabaseType:   dbCfg.Type,
 		BaseDir:        baseDir,
 	}
@@ -426,6 +467,41 @@ func findPrimaryConnection(cfg config) (databaseConfig, error) {
 func sanitizeSchemaName(name string) string {
 	r := strings.NewReplacer("/", "_", "\\", "_", " ", "_", ".", "_")
 	return strings.ToLower(r.Replace(name))
+}
+
+func normalizeDatabaseNames(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	normalized := make([]string, 0, len(names))
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		normalized = append(normalized, name)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func setConnectionDefaultDatabase(cfg *config, connectionName, database string) (bool, error) {
+	database = strings.TrimSpace(database)
+	if database == "" {
+		return false, fmt.Errorf("default database cannot be empty")
+	}
+
+	for i := range cfg.Connections {
+		if cfg.Connections[i].Name != connectionName {
+			continue
+		}
+		if strings.TrimSpace(cfg.Connections[i].Database) == database {
+			return false, nil
+		}
+		cfg.Connections[i].Database = database
+		return true, nil
+	}
+
+	return false, fmt.Errorf("connection %q not found in config", connectionName)
 }
 
 func ensureGitignore() {
@@ -667,6 +743,32 @@ func promptSelect(label string, options []string) string {
 		Value(&result).
 		Run()
 	return result
+}
+
+func promptSelectRequired(label string, options []string) (string, error) {
+	if len(options) == 0 {
+		return "", fmt.Errorf("no options available to select")
+	}
+
+	opts := make([]huh.Option[string], len(options))
+	for i, o := range options {
+		opts[i] = huh.NewOption(o, o)
+	}
+
+	var result string
+	if err := huh.NewSelect[string]().
+		Title(label).
+		Options(opts...).
+		Value(&result).
+		Run(); err != nil {
+		return "", err
+	}
+
+	result = strings.TrimSpace(result)
+	if result == "" {
+		return "", fmt.Errorf("no option selected")
+	}
+	return result, nil
 }
 
 func writeConfig(path string, cfg config) error {
