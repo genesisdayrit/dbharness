@@ -34,7 +34,9 @@ The `_databases.yml` file is documented in detail in
 
 ### _schemas.yml
 
-The schema-level file lists every schema in the database with table counts:
+The schema-level file lists every schema in the database with table/view
+counts and a lightweight table summary. Schemas and tables are sorted
+alphabetically for deterministic output:
 
 ```yaml
 connection: my-db
@@ -42,21 +44,31 @@ database: myapp
 database_type: postgres
 generated_at: "2026-02-12T15:30:00Z"
 schemas:
-  - name: public
-    table_count: 12
-    view_count: 3
-    description: ""
-    tables:
-      - users
-      - orders
-      - products
   - name: analytics
     table_count: 5
     view_count: 2
     description: ""
     tables:
-      - events
-      - sessions
+      - name: events
+        type: BASE TABLE
+        description: ""
+      - name: sessions
+        type: BASE TABLE
+        description: ""
+  - name: public
+    table_count: 12
+    view_count: 3
+    description: ""
+    tables:
+      - name: orders
+        type: BASE TABLE
+        description: ""
+      - name: products
+        type: BASE TABLE
+        description: ""
+      - name: users
+        type: BASE TABLE
+        description: ""
 ```
 
 ### _tables.yml (per schema)
@@ -110,6 +122,10 @@ Queries `INFORMATION_SCHEMA.SCHEMATA` and `INFORMATION_SCHEMA.TABLES`. The `INFO
 ## Re-generating
 
 Running `dbh schemas` again overwrites the existing context files with fresh data. This is useful after schema changes (new tables, dropped schemas, etc.).
+
+For `postgres` and `snowflake` connections, `dbh schemas` only generates
+context for the configured default database. If no default database is set,
+you must first choose one from the connection's database list.
 
 ## Connection selection
 
