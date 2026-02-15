@@ -46,11 +46,18 @@ type SchemasFile struct {
 
 // SchemaItem is one entry in the top-level schemas.yml.
 type SchemaItem struct {
-	Name        string   `yaml:"name"`
-	TableCount  int      `yaml:"table_count"`
-	ViewCount   int      `yaml:"view_count"`
-	Description string   `yaml:"description"` // blank; placeholder for LLM-generated descriptions
-	Tables      []string `yaml:"tables"`
+	Name        string            `yaml:"name"`
+	TableCount  int               `yaml:"table_count"`
+	ViewCount   int               `yaml:"view_count"`
+	Description string            `yaml:"description"` // blank; placeholder for LLM-generated descriptions
+	Tables      []SchemaTableItem `yaml:"tables"`
+}
+
+// SchemaTableItem is one table/view entry in a schema listing.
+type SchemaTableItem struct {
+	Name        string `yaml:"name"`
+	Type        string `yaml:"type"`
+	Description string `yaml:"description"` // blank; placeholder for LLM-generated descriptions
 }
 
 // TablesFile is written inside each <schema>/_tables.yml and provides
@@ -87,7 +94,13 @@ type Options struct {
 func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	defaultDatabase := resolveDefaultDatabase(opts.DatabaseName, nil)
+	defaultDatabase, err := resolveGenerationDatabase(opts)
+	if err != nil {
+		return err
+	}
+
+	sortedSchemas := sortedSchemaInfos(schemas)
+
 	dbName := sanitizeName(defaultDatabase)
 	headerOpts := opts
 	headerOpts.DatabaseName = defaultDatabase
@@ -124,13 +137,17 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 		GeneratedAt:  now,
 	}
 
-	for _, s := range schemas {
+	for _, s := range sortedSchemas {
 		item := SchemaItem{
 			Name:        s.Name,
 			Description: "",
 		}
 		for _, t := range s.Tables {
-			item.Tables = append(item.Tables, t.Name)
+			item.Tables = append(item.Tables, SchemaTableItem{
+				Name:        t.Name,
+				Type:        t.TableType,
+				Description: "",
+			})
 			switch {
 			case isView(t.TableType):
 				item.ViewCount++
@@ -147,7 +164,7 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 	}
 
 	// ---- per-schema _tables.yml files ----
-	for _, s := range schemas {
+	for _, s := range sortedSchemas {
 		schemaDir := filepath.Join(schemasDir, sanitizeName(s.Name))
 		if err := os.MkdirAll(schemaDir, 0o755); err != nil {
 			return fmt.Errorf("create schema dir %q: %w", s.Name, err)
@@ -319,6 +336,51 @@ func tablesHeader(opts Options, schemaName string) string {
 func isView(tableType string) bool {
 	upper := strings.ToUpper(tableType)
 	return strings.Contains(upper, "VIEW")
+}
+
+func resolveGenerationDatabase(opts Options) (string, error) {
+	configured := strings.TrimSpace(opts.DatabaseName)
+	if configured != "" && !strings.EqualFold(configured, "_default") {
+		return configured, nil
+	}
+
+	if requiresExplicitDefaultDatabase(opts.DatabaseType) {
+		return "", fmt.Errorf(
+			`no default database configured for connection %q (%s): select a database from this connection and set it as the default`,
+			opts.ConnectionName,
+			opts.DatabaseType,
+		)
+	}
+
+	return resolveDefaultDatabase(configured, nil), nil
+}
+
+func requiresExplicitDefaultDatabase(databaseType string) bool {
+	switch strings.ToLower(strings.TrimSpace(databaseType)) {
+	case "postgres", "snowflake":
+		return true
+	default:
+		return false
+	}
+}
+
+func sortedSchemaInfos(schemas []discovery.SchemaInfo) []discovery.SchemaInfo {
+	sorted := make([]discovery.SchemaInfo, len(schemas))
+	for i := range schemas {
+		sorted[i] = discovery.SchemaInfo{
+			Name:   schemas[i].Name,
+			Tables: append([]discovery.TableInfo(nil), schemas[i].Tables...),
+		}
+		sort.Slice(sorted[i].Tables, func(a, b int) bool {
+			return sorted[i].Tables[a].Name < sorted[i].Tables[b].Name
+		})
+	}
+
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Name < sorted[j].Name
+	})
+
+	return sorted
 }
 
 // resolveDefaultDatabase ensures default_database in _databases.yml is never blank.
