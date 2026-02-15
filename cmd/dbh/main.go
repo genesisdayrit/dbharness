@@ -76,9 +76,14 @@ func runInit(args []string) {
 		return
 	}
 
-	if err := installTemplate(targetDir, *force); err != nil {
+	snapshotPath, err := installTemplate(targetDir, *force)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if snapshotPath != "" {
+		absSnapshotPath, _ := filepath.Abs(snapshotPath)
+		fmt.Printf("Snapshot saved to %s\n", absSnapshotPath)
 	}
 
 	absPath, _ := filepath.Abs(targetDir)
@@ -157,8 +162,6 @@ func runSnapshot(args []string) {
 
 	ensureGitignore()
 
-	timestamp := time.Now().Format("20060102_1504_05")
-	snapshotDir := filepath.Join(".", ".dbharness-snapshots", timestamp)
 	sourceDir := filepath.Join(".", ".dbharness")
 
 	if configOnly {
@@ -168,7 +171,8 @@ func runSnapshot(args []string) {
 			fmt.Fprintf(os.Stderr, "read config: %v\n", err)
 			os.Exit(1)
 		}
-		if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
+		snapshotDir, err := createSnapshotDir(sourceDir)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "create snapshot dir: %v\n", err)
 			os.Exit(1)
 		}
@@ -180,12 +184,8 @@ func runSnapshot(args []string) {
 		absPath, _ := filepath.Abs(destPath)
 		fmt.Printf("Snapshot saved to %s\n", absPath)
 	} else {
-		source := os.DirFS(sourceDir)
-		if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "create snapshot dir: %v\n", err)
-			os.Exit(1)
-		}
-		if err := copyFS(source, snapshotDir); err != nil {
+		snapshotDir, err := snapshotDirectory(sourceDir)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "snapshot: %v\n", err)
 			os.Exit(1)
 		}
@@ -726,27 +726,62 @@ func pingSnowflake(entry databaseConfig) error {
 	return nil
 }
 
-func installTemplate(targetDir string, force bool) error {
+func installTemplate(targetDir string, force bool) (string, error) {
+	var snapshotPath string
+
 	if info, err := os.Stat(targetDir); err == nil {
 		if !info.IsDir() {
-			return fmt.Errorf("target exists and is not a directory: %s", targetDir)
+			return "", fmt.Errorf("target exists and is not a directory: %s", targetDir)
 		}
 		if !force {
-			return fmt.Errorf("target already exists: %s (use --force to overwrite)", targetDir)
+			return "", fmt.Errorf("target already exists: %s (use --force to overwrite)", targetDir)
+		}
+
+		ensureGitignore()
+		snapshotPath, err = snapshotDirectory(targetDir)
+		if err != nil {
+			return "", fmt.Errorf("snapshot existing .dbharness: %w", err)
 		}
 		if err := os.RemoveAll(targetDir); err != nil {
-			return fmt.Errorf("remove existing target: %w", err)
+			return "", fmt.Errorf("remove existing target: %w", err)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("check target: %w", err)
+		return "", fmt.Errorf("check target: %w", err)
 	}
 
 	root, err := template.Root()
 	if err != nil {
-		return fmt.Errorf("load template: %w", err)
+		return "", fmt.Errorf("load template: %w", err)
 	}
 
-	return copyFS(root, targetDir)
+	if err := copyFS(root, targetDir); err != nil {
+		return "", err
+	}
+
+	return snapshotPath, nil
+}
+
+func createSnapshotDir(sourceDir string) (string, error) {
+	timestamp := time.Now().Format("20060102_1504_05")
+	snapshotDir := filepath.Join(filepath.Dir(sourceDir), ".dbharness-snapshots", timestamp)
+	if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
+		return "", err
+	}
+	return snapshotDir, nil
+}
+
+func snapshotDirectory(sourceDir string) (string, error) {
+	snapshotDir, err := createSnapshotDir(sourceDir)
+	if err != nil {
+		return "", err
+	}
+
+	source := os.DirFS(sourceDir)
+	if err := copyFS(source, snapshotDir); err != nil {
+		return "", err
+	}
+
+	return snapshotDir, nil
 }
 
 func copyFS(source fs.FS, targetDir string) error {
