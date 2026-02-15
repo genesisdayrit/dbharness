@@ -9,7 +9,16 @@ import (
 
 func TestInstallTemplateForceCreatesFullSnapshot(t *testing.T) {
 	projectDir := t.TempDir()
-	t.Chdir(projectDir)
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatalf("chdir to temp project: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(originalWD)
+	}()
 
 	targetDir := ".dbharness"
 	if err := os.MkdirAll(filepath.Join(targetDir, "context", "connections"), 0o755); err != nil {
