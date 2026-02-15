@@ -96,7 +96,7 @@ func TestUpdateDatabasesFile_WritesDefaultDatabaseFieldWhenProvided(t *testing.T
 	}
 }
 
-func TestUpdateDatabasesFile_UsesFirstDiscoveredDatabaseWhenDefaultMissing(t *testing.T) {
+func TestUpdateDatabasesFile_UsesOnlyDatabaseWhenDefaultMissing(t *testing.T) {
 	baseDir := t.TempDir()
 
 	opts := Options{
@@ -105,7 +105,7 @@ func TestUpdateDatabasesFile_UsesFirstDiscoveredDatabaseWhenDefaultMissing(t *te
 		BaseDir:        baseDir,
 	}
 
-	if _, err := UpdateDatabasesFile([]string{"core", "sandbox"}, opts); err != nil {
+	if _, err := UpdateDatabasesFile([]string{"core"}, opts); err != nil {
 		t.Fatalf("UpdateDatabasesFile() error = %v", err)
 	}
 
@@ -114,40 +114,29 @@ func TestUpdateDatabasesFile_UsesFirstDiscoveredDatabaseWhenDefaultMissing(t *te
 		t.Fatalf("default database = %q, want %q", df.DefaultDatabase, "core")
 	}
 	if !strings.Contains(raw, "default_database: core") {
-		t.Fatalf("expected _databases.yml to contain fallback default_database field, got:\n%s", raw)
+		t.Fatalf("expected _databases.yml to contain single-database fallback default, got:\n%s", raw)
 	}
 }
 
-func TestUpdateDatabasesFile_PreservesExistingDefaultWhenConfigDefaultMissing(t *testing.T) {
+func TestUpdateDatabasesFile_UsesSentinelWhenMultipleAndDefaultMissing(t *testing.T) {
 	baseDir := t.TempDir()
 
-	initialOpts := Options{
-		ConnectionName: "warehouse",
-		DatabaseName:   "reporting",
-		DatabaseType:   "snowflake",
-		BaseDir:        baseDir,
-	}
-
-	if _, err := UpdateDatabasesFile([]string{"core", "sandbox"}, initialOpts); err != nil {
-		t.Fatalf("initial UpdateDatabasesFile() error = %v", err)
-	}
-
-	updateOpts := Options{
+	opts := Options{
 		ConnectionName: "warehouse",
 		DatabaseType:   "snowflake",
 		BaseDir:        baseDir,
 	}
 
-	if _, err := UpdateDatabasesFile([]string{"core", "sandbox", "zeta"}, updateOpts); err != nil {
-		t.Fatalf("second UpdateDatabasesFile() error = %v", err)
+	if _, err := UpdateDatabasesFile([]string{"core", "sandbox", "zeta"}, opts); err != nil {
+		t.Fatalf("UpdateDatabasesFile() error = %v", err)
 	}
 
 	df, raw := readDatabasesFile(t, baseDir, "warehouse")
-	if df.DefaultDatabase != "reporting" {
-		t.Fatalf("default database = %q, want %q", df.DefaultDatabase, "reporting")
+	if df.DefaultDatabase != "_default" {
+		t.Fatalf("default database = %q, want %q", df.DefaultDatabase, "_default")
 	}
-	if !strings.Contains(raw, "default_database: reporting") {
-		t.Fatalf("expected _databases.yml to preserve default_database field, got:\n%s", raw)
+	if !strings.Contains(raw, "default_database: _default") {
+		t.Fatalf("expected _databases.yml to contain _default sentinel, got:\n%s", raw)
 	}
 }
 

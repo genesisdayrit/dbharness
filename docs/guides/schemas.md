@@ -34,8 +34,12 @@ Lists the databases available under this connection. `default_database` is
 always present:
 
 - If the connection config has a default database, that value is used.
-- Otherwise, dbh selects a fallback default (the first available database in
-  `_databases.yml`, or `_default` when none are available).
+- If no default is set and exactly one database is available, that database is
+  used and saved to the connection config.
+- If no default is set and multiple databases are available, `dbh
+  update-databases` prompts you to pick one (alphabetical list with arrow-key
+  selection) and saves it to the connection config.
+- If no databases are available, `_default` is used.
 
 ```yaml
 connection: my-db
