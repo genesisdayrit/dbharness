@@ -123,9 +123,33 @@ Queries `INFORMATION_SCHEMA.SCHEMATA` and `INFORMATION_SCHEMA.TABLES`. The `INFO
 
 Running `dbh schemas` again overwrites the existing context files with fresh data. This is useful after schema changes (new tables, dropped schemas, etc.).
 
-For `postgres` and `snowflake` connections, `dbh schemas` only generates
-context for the configured default database. If no default database is set,
-you must first choose one from the connection's database list.
+## Default database behavior (Postgres/Snowflake)
+
+For `postgres` and `snowflake`, `dbh schemas` generates context for only one
+database: the connection's configured default database.
+
+Behavior:
+
+1. If a default database is already configured in `.dbharness/config.json`,
+   it is used directly.
+2. If no default database is configured, dbh discovers databases for the
+   connection and prompts you to select one.
+3. The selected database is saved back to `.dbharness/config.json` and then
+   used for schema generation.
+4. If no databases can be discovered, the command exits with an error asking
+   you to configure a default database.
+
+Interactive selection example:
+
+```text
+$ dbh schemas -s my-db
+No default database configured for connection "my-db".
+? Select a database for schema generation
+  > analytics
+    myapp
+    reporting
+Saved default database "analytics" to /path/to/project/.dbharness/config.json
+```
 
 ## Connection selection
 
