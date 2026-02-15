@@ -206,7 +206,8 @@ func runSchemas(args []string) {
 	}
 
 	baseDir := filepath.Join(".", ".dbharness")
-	cfg, err := readConfig(filepath.Join(baseDir, "config.json"))
+	configPath := filepath.Join(baseDir, "config.json")
+	cfg, err := readConfig(configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -226,6 +227,11 @@ func runSchemas(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	}
+
+	if err := ensureDefaultDatabaseForSchemas(&cfg, &dbCfg, configPath); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	fmt.Printf("Discovering schemas for connection %q (%s)...\n", dbCfg.Name, dbCfg.Type)
@@ -302,6 +308,78 @@ func runSchemas(args []string) {
 	for _, s := range schemas {
 		fmt.Printf("  %s/%s/_tables.yml\n", schemasDir, sanitizeSchemaName(s.Name))
 	}
+}
+
+func ensureDefaultDatabaseForSchemas(cfg *config, dbCfg *databaseConfig, configPath string) error {
+	if !requiresExplicitDatabaseSelection(dbCfg.Type) {
+		return nil
+	}
+	if strings.TrimSpace(dbCfg.Database) != "" {
+		return nil
+	}
+
+	fmt.Printf("No default database configured for connection %q.\n", dbCfg.Name)
+	if dbCfg.Type == "snowflake" && dbCfg.Authenticator == "externalbrowser" {
+		fmt.Println("Opening browser for SSO authentication...")
+	}
+
+	listerCfg := discovery.DatabaseConfig{
+		Type:          dbCfg.Type,
+		Database:      dbCfg.Database,
+		Host:          dbCfg.Host,
+		Port:          dbCfg.Port,
+		User:          dbCfg.User,
+		Password:      dbCfg.Password,
+		SSLMode:       dbCfg.SSLMode,
+		Account:       dbCfg.Account,
+		Role:          dbCfg.Role,
+		Warehouse:     dbCfg.Warehouse,
+		Authenticator: dbCfg.Authenticator,
+	}
+
+	lister, err := discovery.NewDatabaseLister(listerCfg)
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer lister.Close()
+
+	timeout := 60 * time.Second
+	if dbCfg.Authenticator == "externalbrowser" {
+		timeout = 120 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	databases, err := lister.ListDatabases(ctx)
+	if err != nil {
+		return fmt.Errorf("list databases: %w", err)
+	}
+	databases = normalizeDatabaseNames(databases)
+	if len(databases) == 0 {
+		return fmt.Errorf("no databases discovered for connection %q; configure a default database in .dbharness/config.json", dbCfg.Name)
+	}
+
+	selected, err := promptSelectRequired("Select a database for schema generation", databases)
+	if err != nil {
+		return fmt.Errorf("select default database: %w", err)
+	}
+
+	updated, err := setConnectionDefaultDatabase(cfg, dbCfg.Name, selected)
+	if err != nil {
+		return err
+	}
+	if updated {
+		if err := writeConfig(configPath, *cfg); err != nil {
+			return err
+		}
+		absConfigPath, _ := filepath.Abs(configPath)
+		fmt.Printf("Saved default database %q to %s\n", selected, absConfigPath)
+	}
+	dbCfg.Database = selected
+	fmt.Println()
+
+	return nil
 }
 
 func runUpdateDatabases(args []string) {
@@ -467,6 +545,15 @@ func findPrimaryConnection(cfg config) (databaseConfig, error) {
 func sanitizeSchemaName(name string) string {
 	r := strings.NewReplacer("/", "_", "\\", "_", " ", "_", ".", "_")
 	return strings.ToLower(r.Replace(name))
+}
+
+func requiresExplicitDatabaseSelection(databaseType string) bool {
+	switch strings.ToLower(strings.TrimSpace(databaseType)) {
+	case "postgres", "snowflake":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeDatabaseNames(names []string) []string {
