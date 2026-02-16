@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,5 +90,111 @@ func assertFileContent(t *testing.T, path, expected string) {
 	}
 	if string(data) != expected {
 		t.Fatalf("content of %s = %q, want %q", path, string(data), expected)
+	}
+}
+
+func TestPrintConnections(t *testing.T) {
+	cfg := config{
+		Connections: []databaseConfig{
+			{
+				Name: "primary",
+				Type: "postgres",
+				Host: "db.internal",
+				Port: 5432,
+			},
+			{
+				Name:    "warehouse",
+				Type:    "snowflake",
+				Account: "acme-org",
+			},
+			{
+				Name: "local",
+				Type: "sqlite",
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	printConnections(&out, cfg)
+
+	got := out.String()
+	expectedLines := []string{
+		"NAME\tTYPE\tHOST_URL",
+		"primary\tpostgres\tdb.internal:5432",
+		"warehouse\tsnowflake\thttps://acme-org.snowflakecomputing.com",
+		"local\tsqlite\t-",
+	}
+	for _, line := range expectedLines {
+		if !strings.Contains(got, line) {
+			t.Fatalf("expected output to contain %q, got:\n%s", line, got)
+		}
+	}
+}
+
+func TestPrintConnectionsEmpty(t *testing.T) {
+	var out bytes.Buffer
+
+	printConnections(&out, config{})
+
+	if got := out.String(); got != "No connections configured.\n" {
+		t.Fatalf("printConnections(...) = %q, want %q", got, "No connections configured.\n")
+	}
+}
+
+func TestConnectionHostURL(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry databaseConfig
+		want  string
+	}{
+		{
+			name: "postgres with host and port",
+			entry: databaseConfig{
+				Type: "postgres",
+				Host: "localhost",
+				Port: 5432,
+			},
+			want: "localhost:5432",
+		},
+		{
+			name: "postgres with host only",
+			entry: databaseConfig{
+				Type: "postgres",
+				Host: "localhost",
+			},
+			want: "localhost",
+		},
+		{
+			name: "snowflake from account",
+			entry: databaseConfig{
+				Type:    "snowflake",
+				Account: "my-org",
+			},
+			want: "https://my-org.snowflakecomputing.com",
+		},
+		{
+			name: "snowflake keeps explicit URL",
+			entry: databaseConfig{
+				Type:    "snowflake",
+				Account: "https://my-org.snowflakecomputing.com",
+			},
+			want: "https://my-org.snowflakecomputing.com",
+		},
+		{
+			name: "unknown type without host",
+			entry: databaseConfig{
+				Type: "sqlite",
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := connectionHostURL(tt.entry)
+			if got != tt.want {
+				t.Fatalf("connectionHostURL(...) = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

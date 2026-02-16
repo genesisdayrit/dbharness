@@ -89,3 +89,17 @@ dbh test-connection -s my-db
 ```
 
 If no name is provided, it defaults to `"default"`.
+
+### `dbh ls -c`
+
+Lists configured connections from `.dbharness/config.json`:
+
+```bash
+dbh ls -c
+```
+
+Output columns:
+
+- Connection name
+- Database type
+- Host URL (or `-` when unavailable)
