@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -37,6 +38,8 @@ func main() {
 		runTestConnection(os.Args[2:])
 	case "snapshot":
 		runSnapshot(os.Args[2:])
+	case "ls":
+		runList(os.Args[2:])
 	case "schemas":
 		runSchemas(os.Args[2:])
 	case "update-databases":
@@ -53,6 +56,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh test-connection [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh snapshot")
 	fmt.Fprintln(os.Stderr, "  dbh snapshot config")
+	fmt.Fprintln(os.Stderr, "  dbh ls -c")
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh update-databases [-s name]")
 }
@@ -192,6 +196,31 @@ func runSnapshot(args []string) {
 		absPath, _ := filepath.Abs(snapshotDir)
 		fmt.Printf("Snapshot saved to %s\n", absPath)
 	}
+}
+
+func runList(args []string) {
+	flags := flag.NewFlagSet("ls", flag.ExitOnError)
+	shortConnections := flags.Bool("c", false, "List configured connections.")
+	longConnections := flags.Bool("connections", false, "List configured connections.")
+	_ = flags.Parse(args)
+
+	if flags.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "ls does not accept positional arguments")
+		os.Exit(2)
+	}
+
+	if !*shortConnections && !*longConnections {
+		fmt.Fprintln(os.Stderr, "ls requires -c or --connections")
+		os.Exit(2)
+	}
+
+	cfg, err := readConfig(filepath.Join(".", ".dbharness", "config.json"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	printConnections(os.Stdout, cfg)
 }
 
 func runSchemas(args []string) {
@@ -525,6 +554,45 @@ func runUpdateDatabases(args []string) {
 		}
 		fmt.Printf("\nDatabases file written to %s\n", absPath)
 	}
+}
+
+func printConnections(w io.Writer, cfg config) {
+	if len(cfg.Connections) == 0 {
+		fmt.Fprintln(w, "No connections configured.")
+		return
+	}
+
+	fmt.Fprintln(w, "NAME\tTYPE\tHOST_URL")
+	for _, entry := range cfg.Connections {
+		hostURL := connectionHostURL(entry)
+		if hostURL == "" {
+			hostURL = "-"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", entry.Name, entry.Type, hostURL)
+	}
+}
+
+func connectionHostURL(entry databaseConfig) string {
+	host := strings.TrimSpace(entry.Host)
+	if host != "" {
+		if entry.Port > 0 {
+			return fmt.Sprintf("%s:%d", host, entry.Port)
+		}
+		return host
+	}
+
+	if strings.EqualFold(strings.TrimSpace(entry.Type), "snowflake") {
+		account := strings.TrimSpace(entry.Account)
+		if account == "" {
+			return ""
+		}
+		if strings.HasPrefix(account, "https://") || strings.HasPrefix(account, "http://") {
+			return account
+		}
+		return fmt.Sprintf("https://%s.snowflakecomputing.com", account)
+	}
+
+	return ""
 }
 
 // findPrimaryConnection returns the connection marked as primary, or the
