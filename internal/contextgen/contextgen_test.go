@@ -244,6 +244,193 @@ func readDatabasesFile(t *testing.T, baseDir, connection string) (DatabasesFile,
 	return df, string(data)
 }
 
+func TestGenerateTableDetails_WritesColumnsAndSampleFiles(t *testing.T) {
+	baseDir := t.TempDir()
+
+	tables := []TableDetailInput{
+		{
+			Schema: "public",
+			Table:  "users",
+			Columns: []discovery.ColumnInfo{
+				{Name: "id", DataType: "integer", IsNullable: "NO", OrdinalPosition: 1, ColumnDefault: "nextval('users_id_seq'::regclass)"},
+				{Name: "name", DataType: "character varying", IsNullable: "YES", OrdinalPosition: 2},
+				{Name: "email", DataType: "character varying", IsNullable: "NO", OrdinalPosition: 3},
+			},
+			Sample: &discovery.SampleResult{
+				Columns: []string{"id", "name", "email"},
+				Rows: [][]string{
+					{"1", "Alice", "alice@example.com"},
+					{"2", "Bob", "bob@example.com"},
+				},
+			},
+		},
+	}
+
+	opts := Options{
+		ConnectionName: "my-db",
+		DatabaseName:   "analytics",
+		DatabaseType:   "postgres",
+		BaseDir:        baseDir,
+	}
+
+	if err := GenerateTableDetails(tables, opts); err != nil {
+		t.Fatalf("GenerateTableDetails() error = %v", err)
+	}
+
+	tableDir := filepath.Join(baseDir, "context", "connections", "my-db", "databases", "analytics", "schemas", "public", "users")
+
+	// Verify columns YAML
+	colPath := filepath.Join(tableDir, "users__columns.yml")
+	colData, err := os.ReadFile(colPath)
+	if err != nil {
+		t.Fatalf("read columns file: %v", err)
+	}
+
+	var cf ColumnsFile
+	if err := yaml.Unmarshal(colData, &cf); err != nil {
+		t.Fatalf("unmarshal columns: %v", err)
+	}
+	if cf.Schema != "public" || cf.Table != "users" {
+		t.Fatalf("columns file header = schema:%q table:%q, want public/users", cf.Schema, cf.Table)
+	}
+	if len(cf.Columns) != 3 {
+		t.Fatalf("column count = %d, want 3", len(cf.Columns))
+	}
+	if cf.Columns[0].Name != "id" || cf.Columns[0].DataType != "integer" {
+		t.Fatalf("first column = %+v, want id/integer", cf.Columns[0])
+	}
+	if cf.Columns[1].IsNullable != "YES" {
+		t.Fatalf("second column is_nullable = %q, want YES", cf.Columns[1].IsNullable)
+	}
+
+	// Verify header comment
+	colStr := string(colData)
+	if !strings.Contains(colStr, "Columns for table: public.users") {
+		t.Fatalf("columns file should contain header comment, got:\n%s", colStr[:200])
+	}
+
+	// Verify sample XML
+	samplePath := filepath.Join(tableDir, "users__sample.xml")
+	sampleData, err := os.ReadFile(samplePath)
+	if err != nil {
+		t.Fatalf("read sample file: %v", err)
+	}
+
+	sampleStr := string(sampleData)
+	if !strings.Contains(sampleStr, `<?xml version="1.0" encoding="UTF-8"?>`) {
+		t.Fatalf("sample XML should contain XML header")
+	}
+	if !strings.Contains(sampleStr, `schema="public"`) {
+		t.Fatalf("sample XML should contain schema attr")
+	}
+	if !strings.Contains(sampleStr, `row_count="2"`) {
+		t.Fatalf("sample XML should contain row_count attr, got:\n%s", sampleStr)
+	}
+	if !strings.Contains(sampleStr, `name="email"`) {
+		t.Fatalf("sample XML should contain field names")
+	}
+	if !strings.Contains(sampleStr, "alice@example.com") {
+		t.Fatalf("sample XML should contain sample data values")
+	}
+}
+
+func TestGenerateTableDetails_CreatesTableDirectories(t *testing.T) {
+	baseDir := t.TempDir()
+
+	tables := []TableDetailInput{
+		{
+			Schema: "analytics",
+			Table:  "events",
+			Columns: []discovery.ColumnInfo{
+				{Name: "event_id", DataType: "bigint", IsNullable: "NO", OrdinalPosition: 1},
+			},
+			Sample: &discovery.SampleResult{
+				Columns: []string{"event_id"},
+				Rows:    [][]string{{"42"}},
+			},
+		},
+		{
+			Schema: "analytics",
+			Table:  "sessions",
+			Columns: []discovery.ColumnInfo{
+				{Name: "session_id", DataType: "uuid", IsNullable: "NO", OrdinalPosition: 1},
+			},
+			Sample: nil, // no sample data
+		},
+	}
+
+	opts := Options{
+		ConnectionName: "warehouse",
+		DatabaseName:   "prod",
+		DatabaseType:   "snowflake",
+		BaseDir:        baseDir,
+	}
+
+	if err := GenerateTableDetails(tables, opts); err != nil {
+		t.Fatalf("GenerateTableDetails() error = %v", err)
+	}
+
+	eventsDir := filepath.Join(baseDir, "context", "connections", "warehouse", "databases", "prod", "schemas", "analytics", "events")
+	sessionsDir := filepath.Join(baseDir, "context", "connections", "warehouse", "databases", "prod", "schemas", "analytics", "sessions")
+
+	// Both directories should exist
+	if _, err := os.Stat(eventsDir); os.IsNotExist(err) {
+		t.Fatalf("events table directory should exist")
+	}
+	if _, err := os.Stat(sessionsDir); os.IsNotExist(err) {
+		t.Fatalf("sessions table directory should exist")
+	}
+
+	// Events should have both files
+	if _, err := os.Stat(filepath.Join(eventsDir, "events__columns.yml")); os.IsNotExist(err) {
+		t.Fatalf("events columns file should exist")
+	}
+	if _, err := os.Stat(filepath.Join(eventsDir, "events__sample.xml")); os.IsNotExist(err) {
+		t.Fatalf("events sample file should exist")
+	}
+
+	// Sessions should have columns but no sample
+	if _, err := os.Stat(filepath.Join(sessionsDir, "sessions__columns.yml")); os.IsNotExist(err) {
+		t.Fatalf("sessions columns file should exist")
+	}
+	if _, err := os.Stat(filepath.Join(sessionsDir, "sessions__sample.xml")); !os.IsNotExist(err) {
+		t.Fatalf("sessions sample file should not exist (no sample data)")
+	}
+}
+
+func TestGenerateTableDetails_SanitizesDirectoryNames(t *testing.T) {
+	baseDir := t.TempDir()
+
+	tables := []TableDetailInput{
+		{
+			Schema: "My Schema",
+			Table:  "User.Events",
+			Columns: []discovery.ColumnInfo{
+				{Name: "id", DataType: "int", IsNullable: "NO", OrdinalPosition: 1},
+			},
+		},
+	}
+
+	opts := Options{
+		ConnectionName: "test-conn",
+		DatabaseName:   "test_db",
+		DatabaseType:   "postgres",
+		BaseDir:        baseDir,
+	}
+
+	if err := GenerateTableDetails(tables, opts); err != nil {
+		t.Fatalf("GenerateTableDetails() error = %v", err)
+	}
+
+	expected := filepath.Join(baseDir, "context", "connections", "test-conn", "databases", "test_db", "schemas", "my_schema", "user_events")
+	if _, err := os.Stat(expected); os.IsNotExist(err) {
+		t.Fatalf("sanitized table directory should exist at %s", expected)
+	}
+	if _, err := os.Stat(filepath.Join(expected, "user_events__columns.yml")); os.IsNotExist(err) {
+		t.Fatalf("sanitized columns file should exist")
+	}
+}
+
 func readSchemasFile(t *testing.T, baseDir, connection, database string) SchemasFile {
 	t.Helper()
 

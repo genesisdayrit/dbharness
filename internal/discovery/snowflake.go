@@ -197,6 +197,46 @@ func (s *snowflakeDiscoverer) getTables(ctx context.Context, schema string) ([]T
 	return tables, rows.Err()
 }
 
+func (s *snowflakeDiscoverer) GetColumns(ctx context.Context, schema, table string) ([]ColumnInfo, error) {
+	query := `
+		SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, ORDINAL_POSITION, COALESCE(COLUMN_DEFAULT, '')
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+		ORDER BY ORDINAL_POSITION
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("query snowflake columns: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []ColumnInfo
+	for rows.Next() {
+		var c ColumnInfo
+		if err := rows.Scan(&c.Name, &c.DataType, &c.IsNullable, &c.OrdinalPosition, &c.ColumnDefault); err != nil {
+			return nil, fmt.Errorf("scan column row: %w", err)
+		}
+		columns = append(columns, c)
+	}
+	return columns, rows.Err()
+}
+
+func (s *snowflakeDiscoverer) GetSampleRows(ctx context.Context, schema, table string, limit int) (*SampleResult, error) {
+	query := fmt.Sprintf(
+		`SELECT * FROM "%s"."%s" ORDER BY RANDOM() LIMIT %d`,
+		schema, table, limit,
+	)
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query snowflake sample rows: %w", err)
+	}
+	defer rows.Close()
+
+	return scanSampleRows(rows)
+}
+
 func (s *snowflakeDiscoverer) Close() error {
 	return s.db.Close()
 }
