@@ -156,6 +156,46 @@ func (p *postgresDiscoverer) getTables(ctx context.Context, schema string) ([]Ta
 	return tables, rows.Err()
 }
 
+func (p *postgresDiscoverer) GetColumns(ctx context.Context, schema, table string) ([]ColumnInfo, error) {
+	query := `
+		SELECT column_name, data_type, is_nullable, ordinal_position, COALESCE(column_default, '')
+		FROM information_schema.columns
+		WHERE table_schema = $1 AND table_name = $2
+		ORDER BY ordinal_position
+	`
+
+	rows, err := p.db.QueryContext(ctx, query, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("query postgres columns: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []ColumnInfo
+	for rows.Next() {
+		var c ColumnInfo
+		if err := rows.Scan(&c.Name, &c.DataType, &c.IsNullable, &c.OrdinalPosition, &c.ColumnDefault); err != nil {
+			return nil, fmt.Errorf("scan column row: %w", err)
+		}
+		columns = append(columns, c)
+	}
+	return columns, rows.Err()
+}
+
+func (p *postgresDiscoverer) GetSampleRows(ctx context.Context, schema, table string, limit int) (*SampleResult, error) {
+	query := fmt.Sprintf(
+		`SELECT * FROM %q.%q ORDER BY RANDOM() LIMIT %d`,
+		schema, table, limit,
+	)
+
+	rows, err := p.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query postgres sample rows: %w", err)
+	}
+	defer rows.Close()
+
+	return scanSampleRows(rows)
+}
+
 func (p *postgresDiscoverer) Close() error {
 	return p.db.Close()
 }

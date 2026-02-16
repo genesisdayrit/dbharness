@@ -1,9 +1,10 @@
-// Package contextgen generates LLM-friendly YAML context files from
+// Package contextgen generates LLM-friendly YAML and XML context files from
 // database schema metadata. It creates a nested folder structure that
 // is easy for AI coding agents to crawl and discover database objects.
 package contextgen
 
 import (
+	"encoding/xml"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -261,6 +262,148 @@ func UpdateDatabasesFile(discoveredDBs []string, opts Options) (added []string, 
 }
 
 // --------------------------------------------------------------------------
+// Table detail YAML/XML types
+// --------------------------------------------------------------------------
+
+// ColumnsFile is written as <table_name>__columns.yml inside each table directory.
+type ColumnsFile struct {
+	Schema       string            `yaml:"schema"`
+	Table        string            `yaml:"table"`
+	Connection   string            `yaml:"connection"`
+	Database     string            `yaml:"database"`
+	DatabaseType string            `yaml:"database_type"`
+	GeneratedAt  string            `yaml:"generated_at"`
+	Columns      []ColumnsFileItem `yaml:"columns"`
+}
+
+// ColumnsFileItem is one column entry in a columns YAML file.
+type ColumnsFileItem struct {
+	Name            string `yaml:"name"`
+	DataType        string `yaml:"data_type"`
+	IsNullable      string `yaml:"is_nullable"`
+	OrdinalPosition int    `yaml:"ordinal_position"`
+	ColumnDefault   string `yaml:"column_default,omitempty"`
+}
+
+// SampleXML is the root element for <table_name>__sample.xml files.
+type SampleXML struct {
+	XMLName     xml.Name       `xml:"table_sample"`
+	Schema      string         `xml:"schema,attr"`
+	Table       string         `xml:"table,attr"`
+	Connection  string         `xml:"connection,attr"`
+	Database    string         `xml:"database,attr"`
+	RowCount    int            `xml:"row_count,attr"`
+	GeneratedAt string         `xml:"generated_at,attr"`
+	Rows        []SampleRowXML `xml:"row"`
+}
+
+// SampleRowXML is a single row in the sample XML.
+type SampleRowXML struct {
+	Fields []SampleFieldXML `xml:"field"`
+}
+
+// SampleFieldXML is a single field (column value) in a sample row.
+type SampleFieldXML struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:",chardata"`
+}
+
+// TableDetailInput holds the data needed to generate per-table detail files.
+type TableDetailInput struct {
+	Schema  string
+	Table   string
+	Columns []discovery.ColumnInfo
+	Sample  *discovery.SampleResult
+}
+
+// GenerateTableDetails writes per-table __columns.yml and __sample.xml files
+// for the given tables. Files are placed in the directory structure:
+//
+//	<baseDir>/context/connections/<conn>/databases/<db>/schemas/<schema>/<table>/
+func GenerateTableDetails(tables []TableDetailInput, opts Options) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	defaultDatabase, err := resolveGenerationDatabase(opts)
+	if err != nil {
+		return err
+	}
+
+	dbName := sanitizeName(defaultDatabase)
+	schemasDir := filepath.Join(opts.BaseDir, "context", "connections", opts.ConnectionName, "databases", dbName, "schemas")
+
+	for _, td := range tables {
+		schemaDir := sanitizeName(td.Schema)
+		tableDir := sanitizeName(td.Table)
+		dir := filepath.Join(schemasDir, schemaDir, tableDir)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("create table dir %q/%q: %w", td.Schema, td.Table, err)
+		}
+
+		// Write __columns.yml
+		if td.Columns != nil {
+			cf := ColumnsFile{
+				Schema:       td.Schema,
+				Table:        td.Table,
+				Connection:   opts.ConnectionName,
+				Database:     defaultDatabase,
+				DatabaseType: opts.DatabaseType,
+				GeneratedAt:  now,
+			}
+			for _, c := range td.Columns {
+				cf.Columns = append(cf.Columns, ColumnsFileItem{
+					Name:            c.Name,
+					DataType:        c.DataType,
+					IsNullable:      c.IsNullable,
+					OrdinalPosition: c.OrdinalPosition,
+					ColumnDefault:   c.ColumnDefault,
+				})
+			}
+
+			colFileName := sanitizeName(td.Table) + "__columns.yml"
+			colPath := filepath.Join(dir, colFileName)
+			header := columnsHeader(opts, defaultDatabase, td.Schema, td.Table)
+			if err := writeYAMLWithHeader(colPath, cf, header); err != nil {
+				return fmt.Errorf("write columns for %q.%q: %w", td.Schema, td.Table, err)
+			}
+		}
+
+		// Write __sample.xml
+		if td.Sample != nil && len(td.Sample.Rows) > 0 {
+			sx := SampleXML{
+				Schema:      td.Schema,
+				Table:       td.Table,
+				Connection:  opts.ConnectionName,
+				Database:    defaultDatabase,
+				RowCount:    len(td.Sample.Rows),
+				GeneratedAt: now,
+			}
+			for _, row := range td.Sample.Rows {
+				srow := SampleRowXML{}
+				for ci, col := range td.Sample.Columns {
+					val := ""
+					if ci < len(row) {
+						val = row[ci]
+					}
+					srow.Fields = append(srow.Fields, SampleFieldXML{
+						Name:  col,
+						Value: val,
+					})
+				}
+				sx.Rows = append(sx.Rows, srow)
+			}
+
+			sampleFileName := sanitizeName(td.Table) + "__sample.xml"
+			samplePath := filepath.Join(dir, sampleFileName)
+			if err := writeXML(samplePath, sx); err != nil {
+				return fmt.Errorf("write sample for %q.%q: %w", td.Schema, td.Table, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// --------------------------------------------------------------------------
 // helpers
 // --------------------------------------------------------------------------
 
@@ -331,6 +474,39 @@ func tablesHeader(opts Options, schemaName string) string {
 # =============================================================================
 
 `, schemaName, opts.ConnectionName, opts.DatabaseName, opts.DatabaseType, schemaName)
+}
+
+func writeXML(path string, v interface{}) error {
+	data, err := xml.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal xml: %w", err)
+	}
+
+	var buf strings.Builder
+	buf.WriteString(xml.Header)
+	buf.Write(data)
+	buf.WriteString("\n")
+
+	return os.WriteFile(path, []byte(buf.String()), 0o644)
+}
+
+func columnsHeader(opts Options, database, schema, table string) string {
+	return fmt.Sprintf(`# =============================================================================
+# Columns for table: %s.%s
+# Connection: %s | Database: %s | Type: %s
+# =============================================================================
+#
+# This file was generated by dbh to provide LLM-friendly table column context.
+#
+# Column fields:
+#   name             - Column name
+#   data_type        - Database data type
+#   is_nullable      - Whether the column allows NULL values (YES/NO)
+#   ordinal_position - Column position in the table
+#   column_default   - Default value expression (if any)
+# =============================================================================
+
+`, schema, table, opts.ConnectionName, database, opts.DatabaseType)
 }
 
 func isView(tableType string) bool {

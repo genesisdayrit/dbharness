@@ -42,6 +42,8 @@ func main() {
 		runList(os.Args[2:])
 	case "schemas":
 		runSchemas(os.Args[2:])
+	case "tables":
+		runTables(os.Args[2:])
 	case "update-databases":
 		runUpdateDatabases(os.Args[2:])
 	default:
@@ -58,6 +60,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh snapshot config")
 	fmt.Fprintln(os.Stderr, "  dbh ls -c")
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
+	fmt.Fprintln(os.Stderr, "  dbh tables [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh update-databases [-s name]")
 }
 
@@ -336,6 +339,344 @@ func runSchemas(args []string) {
 	fmt.Printf("  %s/_schemas.yml\n", schemasDir)
 	for _, s := range schemas {
 		fmt.Printf("  %s/%s/_tables.yml\n", schemasDir, sanitizeSchemaName(s.Name))
+	}
+}
+
+func runTables(args []string) {
+	flags := flag.NewFlagSet("tables", flag.ExitOnError)
+	shortName := flags.String("s", "", "Connection name from config.json.")
+	longName := flags.String("name", "", "Connection name from config.json.")
+	_ = flags.Parse(args)
+
+	name := *shortName
+	if name == "" {
+		name = *longName
+	}
+
+	baseDir := filepath.Join(".", ".dbharness")
+	configPath := filepath.Join(baseDir, "config.json")
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	var dbCfg databaseConfig
+	if name == "" {
+		dbCfg, err = findPrimaryConnection(cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	} else {
+		dbCfg, err = findDatabaseConfig(cfg, name)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Printf("Using connection %q (%s)\n\n", dbCfg.Name, dbCfg.Type)
+
+	// --- Database selection ---
+	selectedDatabases, err := selectDatabasesForTables(&cfg, &dbCfg, configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if len(selectedDatabases) == 0 {
+		fmt.Println("No databases selected.")
+		return
+	}
+
+	for _, database := range selectedDatabases {
+		fmt.Printf("\n--- Database: %s ---\n", database)
+
+		dbCfgCopy := dbCfg
+		dbCfgCopy.Database = database
+
+		processDatabase(dbCfgCopy, baseDir, database)
+	}
+}
+
+// selectDatabasesForTables handles the interactive database selection workflow.
+func selectDatabasesForTables(cfg *config, dbCfg *databaseConfig, configPath string) ([]string, error) {
+	defaultDB := strings.TrimSpace(dbCfg.Database)
+
+	if defaultDB != "" {
+		// Ask whether to use default database or select databases
+		choice, err := promptSelectRequired(
+			fmt.Sprintf("Database selection (default: %s)", defaultDB),
+			[]string{
+				fmt.Sprintf("Use default database (%s)", defaultDB),
+				"Select databases",
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if strings.HasPrefix(choice, "Use default") {
+			return []string{defaultDB}, nil
+		}
+	}
+
+	// List available databases
+	fmt.Println("Discovering available databases...")
+	if dbCfg.Type == "snowflake" && dbCfg.Authenticator == "externalbrowser" {
+		fmt.Println("Opening browser for SSO authentication...")
+	}
+
+	listerCfg := discovery.DatabaseConfig{
+		Type:          dbCfg.Type,
+		Database:      dbCfg.Database,
+		Host:          dbCfg.Host,
+		Port:          dbCfg.Port,
+		User:          dbCfg.User,
+		Password:      dbCfg.Password,
+		SSLMode:       dbCfg.SSLMode,
+		Account:       dbCfg.Account,
+		Role:          dbCfg.Role,
+		Warehouse:     dbCfg.Warehouse,
+		Authenticator: dbCfg.Authenticator,
+	}
+
+	lister, err := discovery.NewDatabaseLister(listerCfg)
+	if err != nil {
+		return nil, fmt.Errorf("connect: %w", err)
+	}
+	defer lister.Close()
+
+	timeout := 60 * time.Second
+	if dbCfg.Authenticator == "externalbrowser" {
+		timeout = 120 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	databases, err := lister.ListDatabases(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list databases: %w", err)
+	}
+	databases = normalizeDatabaseNames(databases)
+
+	if len(databases) == 0 {
+		return nil, fmt.Errorf("no databases discovered for connection %q", dbCfg.Name)
+	}
+
+	fmt.Printf("Found %d database(s)\n\n", len(databases))
+
+	// Multi-select with "Select all" option
+	selected, err := promptMultiSelectWithAll("Select databases", databases)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(selected) == 0 {
+		return nil, nil
+	}
+
+	// If no default database, prompt to save one
+	if strings.TrimSpace(dbCfg.Database) == "" && len(selected) > 0 {
+		updated, err := setConnectionDefaultDatabase(cfg, dbCfg.Name, selected[0])
+		if err == nil && updated {
+			if err := writeConfig(configPath, *cfg); err == nil {
+				absConfigPath, _ := filepath.Abs(configPath)
+				fmt.Printf("Saved default database %q to %s\n", selected[0], absConfigPath)
+			}
+		}
+		dbCfg.Database = selected[0]
+	}
+
+	return selected, nil
+}
+
+// processDatabase handles schema selection and table detail discovery for one database.
+func processDatabase(dbCfg databaseConfig, baseDir, database string) {
+	discoveryCfg := toDiscoveryConfig(dbCfg)
+
+	if dbCfg.Type == "snowflake" && dbCfg.Authenticator == "externalbrowser" {
+		fmt.Println("Opening browser for SSO authentication...")
+	}
+
+	disc, err := discovery.NewTableDetailDiscoverer(discoveryCfg)
+	if err != nil {
+		fmt.Printf("Could not connect to database %q: %v\n", database, err)
+		return
+	}
+	defer disc.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	// Discover schemas
+	fmt.Println("Discovering schemas...")
+	schemas, err := disc.Discover(ctx)
+	if err != nil {
+		fmt.Printf("Could not discover schemas for %q: %v\n", database, err)
+		return
+	}
+
+	if len(schemas) == 0 {
+		fmt.Println("No schemas found.")
+		return
+	}
+
+	// Collect schema names in alphabetical order
+	schemaNames := make([]string, len(schemas))
+	for i, s := range schemas {
+		schemaNames[i] = s.Name
+	}
+	sort.Strings(schemaNames)
+
+	fmt.Printf("Found %d schema(s)\n\n", len(schemas))
+
+	// Schema selection
+	selectedSchemas, err := promptMultiSelectWithAll("Select schemas", schemaNames)
+	if err != nil {
+		fmt.Printf("Schema selection failed: %v\n", err)
+		return
+	}
+
+	if len(selectedSchemas) == 0 {
+		fmt.Println("No schemas selected.")
+		return
+	}
+
+	// Build lookup for selected schemas
+	selectedSet := make(map[string]bool, len(selectedSchemas))
+	for _, s := range selectedSchemas {
+		selectedSet[s] = true
+	}
+
+	// Process each selected schema
+	var allTableInputs []contextgen.TableDetailInput
+	totalTables := 0
+
+	for _, schema := range schemas {
+		if !selectedSet[schema.Name] {
+			continue
+		}
+
+		fmt.Printf("Processing schema %q (%d tables)...\n", schema.Name, len(schema.Tables))
+
+		for _, table := range schema.Tables {
+			totalTables++
+
+			input := contextgen.TableDetailInput{
+				Schema: schema.Name,
+				Table:  table.Name,
+			}
+
+			// Get columns
+			cols, err := disc.GetColumns(ctx, schema.Name, table.Name)
+			if err != nil {
+				fmt.Printf("  Skipping columns for %s.%s: %v\n", schema.Name, table.Name, err)
+			} else {
+				input.Columns = cols
+			}
+
+			// Get sample rows
+			sample, err := disc.GetSampleRows(ctx, schema.Name, table.Name, 10)
+			if err != nil {
+				fmt.Printf("  Skipping sample for %s.%s: %v\n", schema.Name, table.Name, err)
+			} else {
+				input.Sample = sample
+			}
+
+			allTableInputs = append(allTableInputs, input)
+		}
+	}
+
+	if len(allTableInputs) == 0 {
+		fmt.Println("No tables to process.")
+		return
+	}
+
+	// Generate context files
+	opts := contextgen.Options{
+		ConnectionName: dbCfg.Name,
+		DatabaseName:   database,
+		DatabaseType:   dbCfg.Type,
+		BaseDir:        baseDir,
+	}
+
+	fmt.Printf("\nGenerating context files for %d table(s)...\n", len(allTableInputs))
+
+	if err := contextgen.GenerateTableDetails(allTableInputs, opts); err != nil {
+		fmt.Printf("Error generating files: %v\n", err)
+		return
+	}
+
+	dbName := sanitizeSchemaName(database)
+	schemasDir := filepath.Join(baseDir, "context", "connections", dbCfg.Name, "databases", dbName, "schemas")
+	absPath, _ := filepath.Abs(schemasDir)
+	fmt.Printf("Table context files written to %s\n\n", absPath)
+
+	fmt.Println("Files generated:")
+	for _, t := range allTableInputs {
+		schemaDir := sanitizeSchemaName(t.Schema)
+		tableDir := sanitizeSchemaName(t.Table)
+		dir := filepath.Join(schemasDir, schemaDir, tableDir)
+		if t.Columns != nil {
+			fmt.Printf("  %s/%s__columns.yml\n", dir, tableDir)
+		}
+		if t.Sample != nil && len(t.Sample.Rows) > 0 {
+			fmt.Printf("  %s/%s__sample.xml\n", dir, tableDir)
+		}
+	}
+
+	fmt.Printf("\nProcessed %d table(s) across %d schema(s)\n", totalTables, len(selectedSchemas))
+}
+
+// promptMultiSelectWithAll shows a multi-select prompt with a "Select all" option.
+func promptMultiSelectWithAll(label string, options []string) ([]string, error) {
+	if len(options) == 0 {
+		return nil, fmt.Errorf("no options available")
+	}
+
+	choices := append([]string{"(Select all)"}, options...)
+
+	opts := make([]huh.Option[string], len(choices))
+	for i, o := range choices {
+		opts[i] = huh.NewOption(o, o)
+	}
+
+	var selected []string
+	if err := huh.NewMultiSelect[string]().
+		Title(label).
+		Options(opts...).
+		Value(&selected).
+		Run(); err != nil {
+		return nil, err
+	}
+
+	// Check if "Select all" was chosen
+	for _, s := range selected {
+		if s == "(Select all)" {
+			return options, nil
+		}
+	}
+
+	return selected, nil
+}
+
+// toDiscoveryConfig converts a databaseConfig to a discovery.DatabaseConfig.
+func toDiscoveryConfig(dbCfg databaseConfig) discovery.DatabaseConfig {
+	return discovery.DatabaseConfig{
+		Type:          dbCfg.Type,
+		Database:      dbCfg.Database,
+		Host:          dbCfg.Host,
+		Port:          dbCfg.Port,
+		User:          dbCfg.User,
+		Password:      dbCfg.Password,
+		SSLMode:       dbCfg.SSLMode,
+		Account:       dbCfg.Account,
+		Role:          dbCfg.Role,
+		Warehouse:     dbCfg.Warehouse,
+		Schema:        dbCfg.Schema,
+		Authenticator: dbCfg.Authenticator,
 	}
 }
 
