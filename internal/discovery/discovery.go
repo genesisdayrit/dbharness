@@ -5,7 +5,10 @@ package discovery
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 )
 
 // SchemaInfo holds metadata about a single database schema.
@@ -162,14 +165,65 @@ func scanSampleRows(rows *sql.Rows) (*SampleResult, error) {
 	return result, rows.Err()
 }
 
-// formatValue converts a database value to its string representation.
+// formatValue converts any database value to a string representation.
+// It handles the full range of types that database/sql drivers may return,
+// including time.Time, bool, numeric types, []byte (binary/JSON), and
+// sql.Null* wrappers, so that sample data from any column type is captured.
 func formatValue(v interface{}) string {
 	if v == nil {
 		return ""
 	}
 	switch val := v.(type) {
+	case string:
+		return val
 	case []byte:
 		return string(val)
+	case bool:
+		return strconv.FormatBool(val)
+	case int64:
+		return strconv.FormatInt(val, 10)
+	case int32:
+		return strconv.FormatInt(int64(val), 10)
+	case int:
+		return strconv.Itoa(val)
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(val), 'f', -1, 32)
+	case time.Time:
+		if val.Hour() == 0 && val.Minute() == 0 && val.Second() == 0 && val.Nanosecond() == 0 {
+			return val.Format("2006-01-02")
+		}
+		return val.Format(time.RFC3339)
+	case json.RawMessage:
+		return string(val)
+	case sql.NullString:
+		if val.Valid {
+			return val.String
+		}
+		return ""
+	case sql.NullInt64:
+		if val.Valid {
+			return strconv.FormatInt(val.Int64, 10)
+		}
+		return ""
+	case sql.NullFloat64:
+		if val.Valid {
+			return strconv.FormatFloat(val.Float64, 'f', -1, 64)
+		}
+		return ""
+	case sql.NullBool:
+		if val.Valid {
+			return strconv.FormatBool(val.Bool)
+		}
+		return ""
+	case sql.NullTime:
+		if val.Valid {
+			return formatValue(val.Time)
+		}
+		return ""
+	case fmt.Stringer:
+		return val.String()
 	default:
 		return fmt.Sprintf("%v", val)
 	}

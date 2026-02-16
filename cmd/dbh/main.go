@@ -390,25 +390,13 @@ func runTables(args []string) {
 		return
 	}
 
-	var allErrors []string
-
 	for _, database := range selectedDatabases {
 		fmt.Printf("\n--- Database: %s ---\n", database)
 
-		// Create a copy of dbCfg with this database
 		dbCfgCopy := dbCfg
 		dbCfgCopy.Database = database
 
-		errors := processDatabase(dbCfgCopy, baseDir, database)
-		allErrors = append(allErrors, errors...)
-	}
-
-	if len(allErrors) > 0 {
-		fmt.Println()
-		fmt.Printf("Completed with %d error(s):\n", len(allErrors))
-		for _, e := range allErrors {
-			fmt.Printf("  ! %s\n", e)
-		}
+		processDatabase(dbCfgCopy, baseDir, database)
 	}
 }
 
@@ -505,9 +493,7 @@ func selectDatabasesForTables(cfg *config, dbCfg *databaseConfig, configPath str
 }
 
 // processDatabase handles schema selection and table detail discovery for one database.
-func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
-	var errors []string
-
+func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 	discoveryCfg := toDiscoveryConfig(dbCfg)
 
 	if dbCfg.Type == "snowflake" && dbCfg.Authenticator == "externalbrowser" {
@@ -516,7 +502,8 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
 
 	disc, err := discovery.NewTableDetailDiscoverer(discoveryCfg)
 	if err != nil {
-		return []string{fmt.Sprintf("[%s] connect: %v", database, err)}
+		fmt.Printf("Could not connect to database %q: %v\n", database, err)
+		return
 	}
 	defer disc.Close()
 
@@ -527,12 +514,13 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
 	fmt.Println("Discovering schemas...")
 	schemas, err := disc.Discover(ctx)
 	if err != nil {
-		return []string{fmt.Sprintf("[%s] discover schemas: %v", database, err)}
+		fmt.Printf("Could not discover schemas for %q: %v\n", database, err)
+		return
 	}
 
 	if len(schemas) == 0 {
 		fmt.Println("No schemas found.")
-		return nil
+		return
 	}
 
 	// Collect schema names in alphabetical order
@@ -547,12 +535,13 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
 	// Schema selection
 	selectedSchemas, err := promptMultiSelectWithAll("Select schemas", schemaNames)
 	if err != nil {
-		return []string{fmt.Sprintf("[%s] schema selection: %v", database, err)}
+		fmt.Printf("Schema selection failed: %v\n", err)
+		return
 	}
 
 	if len(selectedSchemas) == 0 {
 		fmt.Println("No schemas selected.")
-		return nil
+		return
 	}
 
 	// Build lookup for selected schemas
@@ -583,8 +572,7 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
 			// Get columns
 			cols, err := disc.GetColumns(ctx, schema.Name, table.Name)
 			if err != nil {
-				errors = append(errors, fmt.Sprintf("[%s.%s.%s] get columns: %v", database, schema.Name, table.Name, err))
-				fmt.Printf("  ! %s.%s: error getting columns: %v\n", schema.Name, table.Name, err)
+				fmt.Printf("  Skipping columns for %s.%s: %v\n", schema.Name, table.Name, err)
 			} else {
 				input.Columns = cols
 			}
@@ -592,8 +580,7 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
 			// Get sample rows
 			sample, err := disc.GetSampleRows(ctx, schema.Name, table.Name, 10)
 			if err != nil {
-				errors = append(errors, fmt.Sprintf("[%s.%s.%s] get sample: %v", database, schema.Name, table.Name, err))
-				fmt.Printf("  ! %s.%s: error getting sample: %v\n", schema.Name, table.Name, err)
+				fmt.Printf("  Skipping sample for %s.%s: %v\n", schema.Name, table.Name, err)
 			} else {
 				input.Sample = sample
 			}
@@ -604,7 +591,7 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
 
 	if len(allTableInputs) == 0 {
 		fmt.Println("No tables to process.")
-		return errors
+		return
 	}
 
 	// Generate context files
@@ -618,9 +605,8 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
 	fmt.Printf("\nGenerating context files for %d table(s)...\n", len(allTableInputs))
 
 	if err := contextgen.GenerateTableDetails(allTableInputs, opts); err != nil {
-		errors = append(errors, fmt.Sprintf("[%s] generate files: %v", database, err))
-		fmt.Fprintf(os.Stderr, "Error generating files: %v\n", err)
-		return errors
+		fmt.Printf("Error generating files: %v\n", err)
+		return
 	}
 
 	dbName := sanitizeSchemaName(database)
@@ -642,8 +628,6 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) []string {
 	}
 
 	fmt.Printf("\nProcessed %d table(s) across %d schema(s)\n", totalTables, len(selectedSchemas))
-
-	return errors
 }
 
 // promptMultiSelectWithAll shows a multi-select prompt with a "Select all" option.
