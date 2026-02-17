@@ -80,6 +80,27 @@ This creates a nested directory structure:
 
 The YAML files are designed for AI coding agents (Claude Code, Cursor, etc.) to discover and explore database structures. Re-running the command refreshes the files with the latest schema data.
 
+### `dbh columns`
+
+Runs an interactive workflow to generate enriched `<table>__columns.yml` files with column-level profiling statistics.
+
+```bash
+# Use the primary connection
+dbh columns
+
+# Use a specific connection
+dbh columns -s my-db
+```
+
+The command:
+
+- warns that profiling can take minutes
+- lets you select databases, schemas, and tables interactively
+- computes per-column metrics (null/non-null counts, distinct counts, percentages)
+- writes one enriched `<table>__columns.yml` file per selected table
+
+`dbh columns` does not modify existing `__sample.xml` files.
+
 ### `dbh test-connection`
 
 Tests a database connection defined in `.dbharness/config.json`:

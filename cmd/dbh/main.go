@@ -47,6 +47,8 @@ func main() {
 		runSchemas(os.Args[2:])
 	case "tables":
 		runTables(os.Args[2:])
+	case "columns":
+		runColumns(os.Args[2:])
 	case "update-databases":
 		runUpdateDatabases(os.Args[2:])
 	default:
@@ -66,6 +68,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh set-default -d")
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh tables [-s name]")
+	fmt.Fprintln(os.Stderr, "  dbh columns [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh update-databases [-s name]")
 }
 
@@ -671,6 +674,355 @@ func runTables(args []string) {
 
 		processDatabase(dbCfgCopy, baseDir, database)
 	}
+}
+
+const (
+	minSecondsPerColumnEstimate = 5
+	maxSecondsPerColumnEstimate = 10
+	columnMetadataTimeout       = 60 * time.Second
+	columnEnrichmentTimeout     = 2 * time.Minute
+)
+
+type tableColumnTarget struct {
+	Schema  string
+	Table   string
+	Columns []discovery.ColumnInfo
+}
+
+func runColumns(args []string) {
+	flags := flag.NewFlagSet("columns", flag.ExitOnError)
+	shortName := flags.String("s", "", "Connection name from config.json.")
+	longName := flags.String("name", "", "Connection name from config.json.")
+	_ = flags.Parse(args)
+
+	name := *shortName
+	if name == "" {
+		name = *longName
+	}
+
+	baseDir := filepath.Join(".", ".dbharness")
+	configPath := filepath.Join(baseDir, "config.json")
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	var dbCfg databaseConfig
+	if name == "" {
+		dbCfg, err = findPrimaryConnection(cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	} else {
+		dbCfg, err = findDatabaseConfig(cfg, name)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Printf("Using connection %q (%s)\n\n", dbCfg.Name, dbCfg.Type)
+	fmt.Println("Warning: dbh columns enriches each selected column and may take several minutes to complete.")
+	if !promptYesNo("Continue with enriched column profiling?") {
+		fmt.Println("Aborted.")
+		return
+	}
+	fmt.Println()
+
+	selectedDatabases, err := selectDatabasesForTables(&cfg, &dbCfg, configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if len(selectedDatabases) == 0 {
+		fmt.Println("No databases selected.")
+		return
+	}
+
+	for _, database := range selectedDatabases {
+		fmt.Printf("\n--- Database: %s ---\n", database)
+
+		dbCfgCopy := dbCfg
+		dbCfgCopy.Database = database
+
+		processDatabaseColumns(dbCfgCopy, baseDir, database)
+	}
+}
+
+func processDatabaseColumns(dbCfg databaseConfig, baseDir, database string) {
+	discoveryCfg := toDiscoveryConfig(dbCfg)
+
+	if dbCfg.Type == "snowflake" && dbCfg.Authenticator == "externalbrowser" {
+		fmt.Println("Opening browser for SSO authentication...")
+	}
+
+	disc, err := discovery.NewTableDetailDiscoverer(discoveryCfg)
+	if err != nil {
+		fmt.Printf("Could not connect to database %q: %v\n", database, err)
+		return
+	}
+	defer disc.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	fmt.Println("Discovering schemas...")
+	schemas, err := disc.Discover(ctx)
+	if err != nil {
+		fmt.Printf("Could not discover schemas for %q: %v\n", database, err)
+		return
+	}
+	if len(schemas) == 0 {
+		fmt.Println("No schemas found.")
+		return
+	}
+
+	schemaNames := make([]string, len(schemas))
+	for i, s := range schemas {
+		schemaNames[i] = s.Name
+	}
+	sort.Strings(schemaNames)
+
+	fmt.Printf("Found %d schema(s)\n\n", len(schemas))
+	selectedSchemas, err := promptMultiSelectWithAll("Select schemas", schemaNames)
+	if err != nil {
+		fmt.Printf("Schema selection failed: %v\n", err)
+		return
+	}
+	if len(selectedSchemas) == 0 {
+		fmt.Println("No schemas selected.")
+		return
+	}
+
+	selectedTables, selectedTableCount, err := selectTablesForColumns(schemas, selectedSchemas)
+	if err != nil {
+		fmt.Printf("Table selection failed: %v\n", err)
+		return
+	}
+	if selectedTableCount == 0 {
+		fmt.Println("No tables selected.")
+		return
+	}
+
+	targets, skippedTargets := buildColumnEnrichmentTargets(disc, schemas, selectedTables)
+	if len(targets) == 0 {
+		fmt.Println("No tables with accessible columns to process.")
+		return
+	}
+
+	totalColumns := 0
+	for _, target := range targets {
+		totalColumns += len(target.Columns)
+	}
+	if totalColumns == 0 {
+		fmt.Println("No columns found for selected tables.")
+		return
+	}
+
+	minEstimate := time.Duration(totalColumns*minSecondsPerColumnEstimate) * time.Second
+	maxEstimate := time.Duration(totalColumns*maxSecondsPerColumnEstimate) * time.Second
+
+	fmt.Printf(
+		"Selected %d table(s) across %d schema(s) with %d total column(s).\n",
+		len(targets),
+		len(selectedTables),
+		totalColumns,
+	)
+	fmt.Printf("Estimated runtime: %s to %s\n", minEstimate.Round(time.Second), maxEstimate.Round(time.Second))
+
+	opts := contextgen.Options{
+		ConnectionName: dbCfg.Name,
+		DatabaseName:   database,
+		DatabaseType:   dbCfg.Type,
+		BaseDir:        baseDir,
+	}
+
+	startedAt := time.Now()
+	processedColumns := 0
+	writtenTables := 0
+	skippedTables := skippedTargets
+
+	for _, target := range targets {
+		tableStart := time.Now()
+		fmt.Printf("\nProcessing table %s.%s (%d column(s))...\n", target.Schema, target.Table, len(target.Columns))
+
+		enrichedColumns := make([]discovery.EnrichedColumnInfo, 0, len(target.Columns))
+		tableFailed := false
+
+		for _, column := range target.Columns {
+			columnStart := time.Now()
+
+			columnCtx, columnCancel := context.WithTimeout(context.Background(), columnEnrichmentTimeout)
+			profile, err := disc.GetColumnEnrichment(columnCtx, target.Schema, target.Table, column)
+			columnCancel()
+			if err != nil {
+				tableFailed = true
+				fmt.Printf(
+					"  Failed profiling %s.%s.%s: %v\n",
+					target.Schema,
+					target.Table,
+					column.Name,
+					err,
+				)
+				break
+			}
+
+			enrichedColumns = append(enrichedColumns, profile)
+			processedColumns++
+
+			remaining := totalColumns - processedColumns
+			remainingETA := estimateRemainingDuration(time.Since(startedAt), processedColumns, remaining)
+			fmt.Printf(
+				"  [%d/%d] %s.%s.%s profiled (%s, est. remaining %s)\n",
+				processedColumns,
+				totalColumns,
+				target.Schema,
+				target.Table,
+				column.Name,
+				time.Since(columnStart).Round(time.Millisecond),
+				remainingETA,
+			)
+		}
+
+		if tableFailed || len(enrichedColumns) != len(target.Columns) {
+			skippedTables++
+			fmt.Printf("  Skipping file write for %s.%s because not all columns were processed.\n", target.Schema, target.Table)
+			continue
+		}
+
+		path, err := contextgen.WriteEnrichedColumnsFile(
+			contextgen.EnrichedColumnsInput{
+				Schema:  target.Schema,
+				Table:   target.Table,
+				Columns: enrichedColumns,
+			},
+			opts,
+		)
+		if err != nil {
+			skippedTables++
+			fmt.Printf("  Failed writing enriched columns file for %s.%s: %v\n", target.Schema, target.Table, err)
+			continue
+		}
+
+		writtenTables++
+		absPath, _ := filepath.Abs(path)
+		fmt.Printf("  Wrote %s (%s)\n", absPath, time.Since(tableStart).Round(time.Millisecond))
+	}
+
+	fmt.Printf(
+		"\nFinished enriched columns for database %q: wrote %d table file(s), skipped %d, processed %d/%d columns in %s.\n",
+		database,
+		writtenTables,
+		skippedTables,
+		processedColumns,
+		totalColumns,
+		time.Since(startedAt).Round(time.Second),
+	)
+}
+
+func selectTablesForColumns(
+	schemas []discovery.SchemaInfo,
+	selectedSchemas []string,
+) (map[string][]string, int, error) {
+	selectedTables := make(map[string][]string, len(selectedSchemas))
+	schemaByName := make(map[string]discovery.SchemaInfo, len(schemas))
+	for _, schema := range schemas {
+		schemaByName[schema.Name] = schema
+	}
+
+	sort.Strings(selectedSchemas)
+
+	totalTables := 0
+	for _, schemaName := range selectedSchemas {
+		schema, ok := schemaByName[schemaName]
+		if !ok {
+			continue
+		}
+
+		tableNames := make([]string, 0, len(schema.Tables))
+		for _, table := range schema.Tables {
+			tableNames = append(tableNames, table.Name)
+		}
+		sort.Strings(tableNames)
+		if len(tableNames) == 0 {
+			fmt.Printf("Schema %q has no tables.\n", schemaName)
+			continue
+		}
+
+		selected, err := promptMultiSelectWithAll(
+			fmt.Sprintf("Select tables in schema %s", schemaName),
+			tableNames,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(selected) == 0 {
+			fmt.Printf("No tables selected for schema %q.\n", schemaName)
+			continue
+		}
+
+		selectedTables[schemaName] = selected
+		totalTables += len(selected)
+	}
+
+	return selectedTables, totalTables, nil
+}
+
+func buildColumnEnrichmentTargets(
+	disc discovery.TableDetailDiscoverer,
+	schemas []discovery.SchemaInfo,
+	selectedTables map[string][]string,
+) ([]tableColumnTarget, int) {
+	targets := make([]tableColumnTarget, 0)
+	skippedTables := 0
+
+	for _, schema := range schemas {
+		tables, ok := selectedTables[schema.Name]
+		if !ok || len(tables) == 0 {
+			continue
+		}
+		sort.Strings(tables)
+
+		for _, table := range tables {
+			columnsCtx, cancel := context.WithTimeout(context.Background(), columnMetadataTimeout)
+			columns, err := disc.GetColumns(columnsCtx, schema.Name, table)
+			cancel()
+			if err != nil {
+				skippedTables++
+				fmt.Printf("Skipping %s.%s: could not read columns: %v\n", schema.Name, table, err)
+				continue
+			}
+			if len(columns) == 0 {
+				skippedTables++
+				fmt.Printf("Skipping %s.%s: no columns found.\n", schema.Name, table)
+				continue
+			}
+
+			targets = append(targets, tableColumnTarget{
+				Schema:  schema.Name,
+				Table:   table,
+				Columns: columns,
+			})
+		}
+	}
+
+	return targets, skippedTables
+}
+
+func estimateRemainingDuration(elapsed time.Duration, processedColumns, remainingColumns int) time.Duration {
+	if processedColumns <= 0 || remainingColumns <= 0 {
+		return 0
+	}
+
+	avgPerColumn := elapsed / time.Duration(processedColumns)
+	if avgPerColumn <= 0 {
+		return 0
+	}
+
+	return (avgPerColumn * time.Duration(remainingColumns)).Round(time.Second)
 }
 
 // selectDatabasesForTables handles the interactive database selection workflow.

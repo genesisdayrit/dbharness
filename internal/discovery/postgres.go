@@ -181,6 +181,92 @@ func (p *postgresDiscoverer) GetColumns(ctx context.Context, schema, table strin
 	return columns, rows.Err()
 }
 
+func (p *postgresDiscoverer) GetColumnEnrichment(ctx context.Context, schema, table string, column ColumnInfo) (EnrichedColumnInfo, error) {
+	profile := newEnrichedColumnInfo(column)
+
+	quotedSchema := quotePostgresIdentifier(schema)
+	quotedTable := quotePostgresIdentifier(table)
+	quotedColumn := quotePostgresIdentifier(column.Name)
+
+	statsQuery := fmt.Sprintf(`
+		SELECT
+			COUNT(*)::bigint AS total_rows,
+			COUNT(*) FILTER (WHERE %[1]s IS NULL)::bigint AS null_count,
+			COUNT(%[1]s)::bigint AS non_null_count,
+			COUNT(DISTINCT %[1]s::text)::bigint AS distinct_non_null_count
+		FROM %[2]s.%[3]s
+	`, quotedColumn, quotedSchema, quotedTable)
+
+	if err := p.db.QueryRowContext(ctx, statsQuery).Scan(
+		&profile.TotalRows,
+		&profile.NullCount,
+		&profile.NonNullCount,
+		&profile.DistinctNonNullCount,
+	); err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf(
+			"profile postgres column %q on %s.%s: %w",
+			column.Name,
+			schema,
+			table,
+			err,
+		)
+	}
+
+	profile.DistinctOfNonNullPct = percentOfTotal(profile.DistinctNonNullCount, profile.NonNullCount)
+	profile.NullOfTotalRowsPct = percentOfTotal(profile.NullCount, profile.TotalRows)
+	profile.NonNullOfTotalRowsPct = percentOfTotal(profile.NonNullCount, profile.TotalRows)
+
+	if shouldSkipColumnSamples(column.DataType) {
+		return profile, nil
+	}
+
+	sampleQuery := fmt.Sprintf(`
+		SELECT DISTINCT LEFT(%[1]s::text, %[2]d)
+		FROM %[3]s.%[4]s
+		WHERE %[1]s IS NOT NULL
+		LIMIT %[5]d
+	`, quotedColumn, maxColumnSampleValueLength, quotedSchema, quotedTable, columnProfileSampleValueLimit)
+
+	rows, err := p.db.QueryContext(ctx, sampleQuery)
+	if err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf(
+			"query postgres sample values for %q on %s.%s: %w",
+			column.Name,
+			schema,
+			table,
+			err,
+		)
+	}
+	defer rows.Close()
+
+	var samples []string
+	for rows.Next() {
+		var value interface{}
+		if err := rows.Scan(&value); err != nil {
+			return EnrichedColumnInfo{}, fmt.Errorf(
+				"scan postgres sample value for %q on %s.%s: %w",
+				column.Name,
+				schema,
+				table,
+				err,
+			)
+		}
+		samples = append(samples, formatValue(value))
+	}
+	if err := rows.Err(); err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf(
+			"iterate postgres sample values for %q on %s.%s: %w",
+			column.Name,
+			schema,
+			table,
+			err,
+		)
+	}
+
+	profile.SampleValues = normalizeColumnSampleValues(samples)
+	return profile, nil
+}
+
 func (p *postgresDiscoverer) GetSampleRows(ctx context.Context, schema, table string, limit int) (*SampleResult, error) {
 	query := fmt.Sprintf(
 		`SELECT * FROM %q.%q ORDER BY RANDOM() LIMIT %d`,

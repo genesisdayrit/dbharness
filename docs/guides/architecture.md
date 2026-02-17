@@ -30,7 +30,7 @@ This document describes the `.dbharness/context/` directory structure — what i
 | Database | `databases/<name>/` | `_databases.yml` | One directory per database; index lists all databases |
 | Schema | `schemas/<name>/` | `_schemas.yml` | One directory per schema; index lists all schemas with table counts |
 | Table (index) | — | `_tables.yml` | Per-schema file listing all tables and views |
-| Table (detail) | `<table>/` | `__columns.yml`, `__sample.xml` | Per-table column metadata and sample data |
+| Table (detail) | `<table>/` | `__columns.yml`, `__sample.xml` | Per-table column metadata (basic via `dbh tables`, enriched via `dbh columns`) and sample data |
 
 ### Naming Conventions
 
@@ -66,7 +66,6 @@ This document describes the `.dbharness/context/` directory structure — what i
 ### Planned Additions
 
 - **Workspaces**: A `workspaces/` directory alongside `databases/` for project-specific context, memory, and logging.
-- **Detailed column info command**: More detailed column information beyond what `__columns.yml` currently provides.
 - **Schema refresh**: Automated detection and refresh of changed schemas and tables.
 
 ### What's Not Yet Implemented
