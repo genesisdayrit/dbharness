@@ -79,4 +79,5 @@ databases. New entries are appended in alphabetical order.
 ## Related guides
 
 - [`schemas.md`](./schemas.md) for `_schemas.yml` and per-schema `_tables.yml`
+- [`columns.md`](./columns.md) for enriched `<table>__columns.yml` profiling
 - [`init.md`](./init.md) for setting connection defaults during setup

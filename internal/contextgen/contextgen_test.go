@@ -141,8 +141,11 @@ func TestGenerate_SortsSchemasAndTablesAndIncludesTableDetails(t *testing.T) {
 	if analytics.Tables[1].Name != "users" || analytics.Tables[1].Type != "BASE TABLE" {
 		t.Fatalf("second analytics table = %+v, want users BASE TABLE", analytics.Tables[1])
 	}
-	if analytics.Tables[0].Description != "" || analytics.Tables[1].Description != "" {
-		t.Fatalf("analytics table descriptions should be blank placeholders, got %+v", analytics.Tables)
+	if analytics.Tables[0].AIDescription != "" || analytics.Tables[1].AIDescription != "" {
+		t.Fatalf("analytics table ai_description should be blank placeholders, got %+v", analytics.Tables)
+	}
+	if analytics.Tables[0].DBDescription != "" || analytics.Tables[1].DBDescription != "" {
+		t.Fatalf("analytics table db_description should be blank placeholders, got %+v", analytics.Tables)
 	}
 
 	zeta := sf.Schemas[1]
@@ -428,6 +431,125 @@ func TestGenerateTableDetails_SanitizesDirectoryNames(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(expected, "user_events__columns.yml")); os.IsNotExist(err) {
 		t.Fatalf("sanitized columns file should exist")
+	}
+}
+
+func TestWriteEnrichedColumnsFile_WritesEnrichedMetrics(t *testing.T) {
+	baseDir := t.TempDir()
+
+	input := EnrichedColumnsInput{
+		Schema: "public",
+		Table:  "users",
+		Columns: []discovery.EnrichedColumnInfo{
+			{
+				Name:                  "id",
+				DataType:              "integer",
+				IsNullable:            "NO",
+				OrdinalPosition:       1,
+				ColumnDefault:         "nextval('users_id_seq'::regclass)",
+				AIDescription:         "",
+				DBDescription:         "",
+				TotalRows:             200,
+				NullCount:             0,
+				NonNullCount:          200,
+				DistinctNonNullCount:  200,
+				DistinctOfNonNullPct:  100,
+				NullOfTotalRowsPct:    0,
+				NonNullOfTotalRowsPct: 100,
+				SampleValues:          []string{"1", "2", "3"},
+			},
+			{
+				Name:                  "email",
+				DataType:              "character varying",
+				IsNullable:            "YES",
+				OrdinalPosition:       2,
+				AIDescription:         "",
+				DBDescription:         "",
+				TotalRows:             200,
+				NullCount:             20,
+				NonNullCount:          180,
+				DistinctNonNullCount:  175,
+				DistinctOfNonNullPct:  97.2222,
+				NullOfTotalRowsPct:    10,
+				NonNullOfTotalRowsPct: 90,
+				SampleValues:          []string{"alice@example.com"},
+			},
+		},
+	}
+
+	opts := Options{
+		ConnectionName: "my-db",
+		DatabaseName:   "analytics",
+		DatabaseType:   "postgres",
+		BaseDir:        baseDir,
+	}
+
+	path, err := WriteEnrichedColumnsFile(input, opts)
+	if err != nil {
+		t.Fatalf("WriteEnrichedColumnsFile() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read enriched columns file: %v", err)
+	}
+
+	var file EnrichedColumnsFile
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		t.Fatalf("unmarshal enriched columns file: %v", err)
+	}
+
+	if file.Schema != "public" || file.Table != "users" {
+		t.Fatalf("header schema/table = %s/%s, want public/users", file.Schema, file.Table)
+	}
+	if len(file.Columns) != 2 {
+		t.Fatalf("column count = %d, want 2", len(file.Columns))
+	}
+	if file.Columns[0].DistinctNonNullCount != 200 {
+		t.Fatalf("first column distinct count = %d, want 200", file.Columns[0].DistinctNonNullCount)
+	}
+	if file.Columns[1].NullOfTotalRowsPct != 10 {
+		t.Fatalf("second column null pct = %v, want 10", file.Columns[1].NullOfTotalRowsPct)
+	}
+	if file.Columns[1].AIDescription != "" {
+		t.Fatalf("ai_description should be blank placeholder, got %q", file.Columns[1].AIDescription)
+	}
+	if file.Columns[1].DBDescription != "" {
+		t.Fatalf("db_description should be blank placeholder, got %q", file.Columns[1].DBDescription)
+	}
+	if !strings.Contains(string(data), "Enriched columns for table: public.users") {
+		t.Fatalf("expected enriched header comment in file")
+	}
+	if !strings.Contains(string(data), `ai_description: ""`) {
+		t.Fatalf(`expected explicit blank ai_description field in YAML, got:
+%s`, string(data))
+	}
+	if !strings.Contains(string(data), `db_description: ""`) {
+		t.Fatalf(`expected explicit blank db_description field in YAML, got:
+%s`, string(data))
+	}
+}
+
+func TestWriteEnrichedColumnsFile_RejectsEmptyInput(t *testing.T) {
+	baseDir := t.TempDir()
+
+	opts := Options{
+		ConnectionName: "my-db",
+		DatabaseName:   "analytics",
+		DatabaseType:   "postgres",
+		BaseDir:        baseDir,
+	}
+
+	_, err := WriteEnrichedColumnsFile(EnrichedColumnsInput{
+		Schema:  "public",
+		Table:   "users",
+		Columns: nil,
+	}, opts)
+	if err == nil {
+		t.Fatalf("WriteEnrichedColumnsFile() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "no columns provided") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -47,18 +47,20 @@ type SchemasFile struct {
 
 // SchemaItem is one entry in the top-level schemas.yml.
 type SchemaItem struct {
-	Name        string            `yaml:"name"`
-	TableCount  int               `yaml:"table_count"`
-	ViewCount   int               `yaml:"view_count"`
-	Description string            `yaml:"description"` // blank; placeholder for LLM-generated descriptions
-	Tables      []SchemaTableItem `yaml:"tables"`
+	Name          string            `yaml:"name"`
+	TableCount    int               `yaml:"table_count"`
+	ViewCount     int               `yaml:"view_count"`
+	AIDescription string            `yaml:"ai_description"` // blank; placeholder for AI-generated descriptions
+	DBDescription string            `yaml:"db_description"` // DB-native description/comment (if available)
+	Tables        []SchemaTableItem `yaml:"tables"`
 }
 
 // SchemaTableItem is one table/view entry in a schema listing.
 type SchemaTableItem struct {
-	Name        string `yaml:"name"`
-	Type        string `yaml:"type"`
-	Description string `yaml:"description"` // blank; placeholder for LLM-generated descriptions
+	Name          string `yaml:"name"`
+	Type          string `yaml:"type"`
+	AIDescription string `yaml:"ai_description"` // blank; placeholder for AI-generated descriptions
+	DBDescription string `yaml:"db_description"` // DB-native description/comment (if available)
 }
 
 // TablesFile is written inside each <schema>/_tables.yml and provides
@@ -74,9 +76,10 @@ type TablesFile struct {
 
 // TablesEntry is one row in a tables.yml file.
 type TablesEntry struct {
-	Name        string `yaml:"name"`
-	Type        string `yaml:"type"`        // BASE TABLE, VIEW, etc.
-	Description string `yaml:"description"` // blank placeholder
+	Name          string `yaml:"name"`
+	Type          string `yaml:"type"` // BASE TABLE, VIEW, etc.
+	AIDescription string `yaml:"ai_description"`
+	DBDescription string `yaml:"db_description"`
 }
 
 // --------------------------------------------------------------------------
@@ -140,14 +143,16 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 
 	for _, s := range sortedSchemas {
 		item := SchemaItem{
-			Name:        s.Name,
-			Description: "",
+			Name:          s.Name,
+			AIDescription: "",
+			DBDescription: "",
 		}
 		for _, t := range s.Tables {
 			item.Tables = append(item.Tables, SchemaTableItem{
-				Name:        t.Name,
-				Type:        t.TableType,
-				Description: "",
+				Name:          t.Name,
+				Type:          t.TableType,
+				AIDescription: "",
+				DBDescription: "",
 			})
 			switch {
 			case isView(t.TableType):
@@ -180,9 +185,10 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 		}
 		for _, t := range s.Tables {
 			tf.Tables = append(tf.Tables, TablesEntry{
-				Name:        t.Name,
-				Type:        t.TableType,
-				Description: "",
+				Name:          t.Name,
+				Type:          t.TableType,
+				AIDescription: "",
+				DBDescription: "",
 			})
 		}
 
@@ -283,6 +289,44 @@ type ColumnsFileItem struct {
 	IsNullable      string `yaml:"is_nullable"`
 	OrdinalPosition int    `yaml:"ordinal_position"`
 	ColumnDefault   string `yaml:"column_default,omitempty"`
+}
+
+// EnrichedColumnsFile is written as <table_name>__columns.yml when using
+// the dbh columns command.
+type EnrichedColumnsFile struct {
+	Schema       string                    `yaml:"schema"`
+	Table        string                    `yaml:"table"`
+	Connection   string                    `yaml:"connection"`
+	Database     string                    `yaml:"database"`
+	DatabaseType string                    `yaml:"database_type"`
+	GeneratedAt  string                    `yaml:"generated_at"`
+	Columns      []EnrichedColumnsFileItem `yaml:"columns"`
+}
+
+// EnrichedColumnsFileItem is one enriched column profile entry.
+type EnrichedColumnsFileItem struct {
+	Name                  string   `yaml:"name"`
+	DataType              string   `yaml:"data_type"`
+	IsNullable            string   `yaml:"is_nullable"`
+	OrdinalPosition       int      `yaml:"ordinal_position"`
+	ColumnDefault         string   `yaml:"column_default,omitempty"`
+	AIDescription         string   `yaml:"ai_description"`
+	DBDescription         string   `yaml:"db_description"`
+	TotalRows             int64    `yaml:"total_rows"`
+	NullCount             int64    `yaml:"null_count"`
+	NonNullCount          int64    `yaml:"non_null_count"`
+	DistinctNonNullCount  int64    `yaml:"distinct_non_null_count"`
+	DistinctOfNonNullPct  float64  `yaml:"distinct_of_non_null_pct"`
+	NullOfTotalRowsPct    float64  `yaml:"null_of_total_rows_pct"`
+	NonNullOfTotalRowsPct float64  `yaml:"non_null_of_total_rows_pct"`
+	SampleValues          []string `yaml:"sample_values,omitempty"`
+}
+
+// EnrichedColumnsInput holds all enriched columns for one table.
+type EnrichedColumnsInput struct {
+	Schema  string
+	Table   string
+	Columns []discovery.EnrichedColumnInfo
 }
 
 // SampleXML is the root element for <table_name>__sample.xml files.
@@ -403,6 +447,84 @@ func GenerateTableDetails(tables []TableDetailInput, opts Options) error {
 	return nil
 }
 
+// WriteEnrichedColumnsFile writes one enriched <table_name>__columns.yml file.
+// The file is written atomically so existing files are only replaced after the
+// full payload has been successfully serialized.
+func WriteEnrichedColumnsFile(input EnrichedColumnsInput, opts Options) (string, error) {
+	if strings.TrimSpace(input.Schema) == "" {
+		return "", fmt.Errorf("schema is required for enriched columns")
+	}
+	if strings.TrimSpace(input.Table) == "" {
+		return "", fmt.Errorf("table is required for enriched columns")
+	}
+	if len(input.Columns) == 0 {
+		return "", fmt.Errorf("no columns provided for %s.%s", input.Schema, input.Table)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	defaultDatabase, err := resolveGenerationDatabase(opts)
+	if err != nil {
+		return "", err
+	}
+
+	dbName := sanitizeName(defaultDatabase)
+	schemaDir := sanitizeName(input.Schema)
+	tableDir := sanitizeName(input.Table)
+	dir := filepath.Join(
+		opts.BaseDir,
+		"context",
+		"connections",
+		opts.ConnectionName,
+		"databases",
+		dbName,
+		"schemas",
+		schemaDir,
+		tableDir,
+	)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create table dir %q/%q: %w", input.Schema, input.Table, err)
+	}
+
+	file := EnrichedColumnsFile{
+		Schema:       input.Schema,
+		Table:        input.Table,
+		Connection:   opts.ConnectionName,
+		Database:     defaultDatabase,
+		DatabaseType: opts.DatabaseType,
+		GeneratedAt:  now,
+	}
+
+	for _, column := range input.Columns {
+		file.Columns = append(file.Columns, EnrichedColumnsFileItem{
+			Name:                  column.Name,
+			DataType:              column.DataType,
+			IsNullable:            column.IsNullable,
+			OrdinalPosition:       column.OrdinalPosition,
+			ColumnDefault:         column.ColumnDefault,
+			AIDescription:         column.AIDescription,
+			DBDescription:         column.DBDescription,
+			TotalRows:             column.TotalRows,
+			NullCount:             column.NullCount,
+			NonNullCount:          column.NonNullCount,
+			DistinctNonNullCount:  column.DistinctNonNullCount,
+			DistinctOfNonNullPct:  column.DistinctOfNonNullPct,
+			NullOfTotalRowsPct:    column.NullOfTotalRowsPct,
+			NonNullOfTotalRowsPct: column.NonNullOfTotalRowsPct,
+			SampleValues:          column.SampleValues,
+		})
+	}
+
+	colFileName := sanitizeName(input.Table) + "__columns.yml"
+	colPath := filepath.Join(dir, colFileName)
+	header := enrichedColumnsHeader(opts, defaultDatabase, input.Schema, input.Table)
+	if err := writeYAMLWithHeaderAtomic(colPath, file, header); err != nil {
+		return "", fmt.Errorf("write enriched columns for %q.%q: %w", input.Schema, input.Table, err)
+	}
+
+	return colPath, nil
+}
+
 // --------------------------------------------------------------------------
 // helpers
 // --------------------------------------------------------------------------
@@ -418,6 +540,28 @@ func writeYAMLWithHeader(path string, v interface{}, header string) error {
 	buf.Write(data)
 
 	return os.WriteFile(path, []byte(buf.String()), 0o644)
+}
+
+func writeYAMLWithHeaderAtomic(path string, v interface{}, header string) error {
+	data, err := yaml.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("marshal yaml: %w", err)
+	}
+
+	var buf strings.Builder
+	buf.WriteString(header)
+	buf.Write(data)
+
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, []byte(buf.String()), 0o644); err != nil {
+		return fmt.Errorf("write temp yaml: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("rename temp yaml: %w", err)
+	}
+
+	return nil
 }
 
 func databasesHeader(opts Options) string {
@@ -454,8 +598,10 @@ func schemasHeader(opts Options) string {
 # To explore a specific schema, navigate into the schema subdirectory.
 # Each schema directory contains a _tables.yml with its table listing.
 #
-# The "description" fields are empty by default. They can be populated
-# with LLM-generated or human-written descriptions for richer context.
+# Description fields:
+#   ai_description - Intended for AI-authored descriptions.
+#   db_description - Intended for database-native descriptions/comments.
+# Both are empty when no description data is available.
 # =============================================================================
 
 `, opts.ConnectionName, opts.DatabaseName, opts.DatabaseType)
@@ -469,8 +615,10 @@ func tablesHeader(opts Options, schemaName string) string {
 #
 # This file lists all tables and views in the "%s" schema.
 #
-# The "description" fields are empty by default. They can be populated
-# with LLM-generated or human-written descriptions for richer context.
+# Description fields:
+#   ai_description - Intended for AI-authored descriptions.
+#   db_description - Intended for database-native descriptions/comments.
+# Both are empty when no description data is available.
 # =============================================================================
 
 `, schemaName, opts.ConnectionName, opts.DatabaseName, opts.DatabaseType, schemaName)
@@ -504,6 +652,35 @@ func columnsHeader(opts Options, database, schema, table string) string {
 #   is_nullable      - Whether the column allows NULL values (YES/NO)
 #   ordinal_position - Column position in the table
 #   column_default   - Default value expression (if any)
+# =============================================================================
+
+`, schema, table, opts.ConnectionName, database, opts.DatabaseType)
+}
+
+func enrichedColumnsHeader(opts Options, database, schema, table string) string {
+	return fmt.Sprintf(`# =============================================================================
+# Enriched columns for table: %s.%s
+# Connection: %s | Database: %s | Type: %s
+# =============================================================================
+#
+# This file was generated by dbh columns to provide enriched per-column context.
+#
+# Column fields:
+#   name                       - Column name
+#   data_type                  - Database data type
+#   is_nullable                - Whether NULL is allowed (YES/NO)
+#   ordinal_position           - Column position in the table
+#   column_default             - Default expression (if any)
+#   ai_description             - Blank placeholder for future AI descriptions
+#   db_description             - Database-native description/comment (if available)
+#   total_rows                 - Total rows in table at profiling time
+#   null_count                 - Rows where this column is NULL
+#   non_null_count             - Rows where this column is NOT NULL
+#   distinct_non_null_count    - Distinct non-NULL values
+#   distinct_of_non_null_pct   - distinct_non_null_count / non_null_count * 100
+#   null_of_total_rows_pct     - null_count / total_rows * 100
+#   non_null_of_total_rows_pct - non_null_count / total_rows * 100
+#   sample_values              - Up to 5 truncated example values
 # =============================================================================
 
 `, schema, table, opts.ConnectionName, database, opts.DatabaseType)

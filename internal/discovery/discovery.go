@@ -32,6 +32,28 @@ type ColumnInfo struct {
 	ColumnDefault   string
 }
 
+// EnrichedColumnInfo holds detailed profiling metadata about a column.
+// It extends basic information_schema metadata with table-level statistics
+// and compact sample values suitable for YAML context files.
+type EnrichedColumnInfo struct {
+	Name            string
+	DataType        string
+	IsNullable      string
+	OrdinalPosition int
+	ColumnDefault   string
+	AIDescription   string
+	DBDescription   string
+
+	TotalRows             int64
+	NullCount             int64
+	NonNullCount          int64
+	DistinctNonNullCount  int64
+	DistinctOfNonNullPct  float64
+	NullOfTotalRowsPct    float64
+	NonNullOfTotalRowsPct float64
+	SampleValues          []string
+}
+
 // SampleResult holds the column headers and row data from a sample query.
 type SampleResult struct {
 	Columns []string
@@ -52,6 +74,8 @@ type TableDetailDiscoverer interface {
 	Discoverer
 	// GetColumns returns column metadata for the given schema and table.
 	GetColumns(ctx context.Context, schema, table string) ([]ColumnInfo, error)
+	// GetColumnEnrichment returns detailed profile stats for a single column.
+	GetColumnEnrichment(ctx context.Context, schema, table string, column ColumnInfo) (EnrichedColumnInfo, error)
 	// GetSampleRows returns a random sample of rows from the given table.
 	GetSampleRows(ctx context.Context, schema, table string, limit int) (*SampleResult, error)
 }

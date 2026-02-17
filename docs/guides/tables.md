@@ -2,6 +2,8 @@
 
 `dbh tables` connects to a database and generates detailed per-table context files including column metadata and sample data. These files are designed for AI coding agents to have readily explorable database context for generating SQL and analyses.
 
+For enriched column profiling metrics (null rates, distinct counts, percentages), use [`dbh columns`](./columns.md).
+
 ## Quick start
 
 ```bash

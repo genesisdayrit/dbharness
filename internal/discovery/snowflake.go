@@ -222,6 +222,111 @@ func (s *snowflakeDiscoverer) GetColumns(ctx context.Context, schema, table stri
 	return columns, rows.Err()
 }
 
+func (s *snowflakeDiscoverer) GetColumnEnrichment(ctx context.Context, schema, table string, column ColumnInfo) (EnrichedColumnInfo, error) {
+	profile := newEnrichedColumnInfo(column)
+
+	quotedSchema := quoteSnowflakeIdentifier(schema)
+	quotedTable := quoteSnowflakeIdentifier(table)
+	quotedColumn := quoteSnowflakeIdentifier(column.Name)
+
+	statsQuery := fmt.Sprintf(`
+		SELECT
+			COUNT(*) AS total_rows,
+			COUNT_IF(%[1]s IS NULL) AS null_count,
+			COUNT(%[1]s) AS non_null_count,
+			COUNT(DISTINCT IFF(%[1]s IS NULL, NULL, TO_VARCHAR(%[1]s))) AS distinct_non_null_count
+		FROM %[2]s.%[3]s
+	`, quotedColumn, quotedSchema, quotedTable)
+
+	var totalRowsRaw, nullCountRaw, nonNullCountRaw, distinctCountRaw interface{}
+	if err := s.db.QueryRowContext(ctx, statsQuery).Scan(
+		&totalRowsRaw,
+		&nullCountRaw,
+		&nonNullCountRaw,
+		&distinctCountRaw,
+	); err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf(
+			"profile snowflake column %q on %s.%s: %w",
+			column.Name,
+			schema,
+			table,
+			err,
+		)
+	}
+
+	var err error
+	profile.TotalRows, err = int64FromDBValue(totalRowsRaw)
+	if err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf("parse total_rows for %q on %s.%s: %w", column.Name, schema, table, err)
+	}
+	profile.NullCount, err = int64FromDBValue(nullCountRaw)
+	if err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf("parse null_count for %q on %s.%s: %w", column.Name, schema, table, err)
+	}
+	profile.NonNullCount, err = int64FromDBValue(nonNullCountRaw)
+	if err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf("parse non_null_count for %q on %s.%s: %w", column.Name, schema, table, err)
+	}
+	profile.DistinctNonNullCount, err = int64FromDBValue(distinctCountRaw)
+	if err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf("parse distinct_non_null_count for %q on %s.%s: %w", column.Name, schema, table, err)
+	}
+
+	profile.DistinctOfNonNullPct = percentOfTotal(profile.DistinctNonNullCount, profile.NonNullCount)
+	profile.NullOfTotalRowsPct = percentOfTotal(profile.NullCount, profile.TotalRows)
+	profile.NonNullOfTotalRowsPct = percentOfTotal(profile.NonNullCount, profile.TotalRows)
+
+	if shouldSkipColumnSamples(column.DataType) {
+		return profile, nil
+	}
+
+	sampleQuery := fmt.Sprintf(`
+		SELECT DISTINCT LEFT(TO_VARCHAR(%[1]s), %[2]d)
+		FROM %[3]s.%[4]s
+		WHERE %[1]s IS NOT NULL
+		LIMIT %[5]d
+	`, quotedColumn, maxColumnSampleValueLength, quotedSchema, quotedTable, columnProfileSampleValueLimit)
+
+	rows, err := s.db.QueryContext(ctx, sampleQuery)
+	if err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf(
+			"query snowflake sample values for %q on %s.%s: %w",
+			column.Name,
+			schema,
+			table,
+			err,
+		)
+	}
+	defer rows.Close()
+
+	var samples []string
+	for rows.Next() {
+		var value interface{}
+		if err := rows.Scan(&value); err != nil {
+			return EnrichedColumnInfo{}, fmt.Errorf(
+				"scan snowflake sample value for %q on %s.%s: %w",
+				column.Name,
+				schema,
+				table,
+				err,
+			)
+		}
+		samples = append(samples, formatValue(value))
+	}
+	if err := rows.Err(); err != nil {
+		return EnrichedColumnInfo{}, fmt.Errorf(
+			"iterate snowflake sample values for %q on %s.%s: %w",
+			column.Name,
+			schema,
+			table,
+			err,
+		)
+	}
+
+	profile.SampleValues = normalizeColumnSampleValues(samples)
+	return profile, nil
+}
+
 func (s *snowflakeDiscoverer) GetSampleRows(ctx context.Context, schema, table string, limit int) (*SampleResult, error) {
 	query := fmt.Sprintf(
 		`SELECT * FROM "%s"."%s" ORDER BY RANDOM() LIMIT %d`,
