@@ -113,3 +113,16 @@ dbh set-default -c
 ```
 
 The selected connection is set to `"primary": true`, and the previous primary connection is updated to `"primary": false`.
+
+### `dbh set-default -d`
+
+Interactively selects a default database for the current primary connection using:
+
+```text
+.dbharness/context/connections/<primary-connection>/databases/_databases.yml
+```
+
+The prompt shows the current default database (if one exists), includes an option to keep it, and writes any new selection to both:
+
+- `.dbharness/config.json` (connection `database` field)
+- `.dbharness/context/connections/<primary-connection>/databases/_databases.yml` (`default_database`)
