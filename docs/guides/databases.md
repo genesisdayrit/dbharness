@@ -1,6 +1,6 @@
 # Databases
 
-`dbh update-databases` discovers databases for a configured connection and
+`dbh databases` discovers databases for a configured connection and
 updates `.dbharness/context/connections/<connection-name>/databases/_databases.yml`.
 
 It is useful when you want to refresh the database list without generating full
@@ -10,10 +10,10 @@ schema context for each database.
 
 ```bash
 # Update databases for the primary connection
-dbh update-databases
+dbh databases
 
 # Update databases for a specific connection
-dbh update-databases -s my-connection
+dbh databases -s my-connection
 ```
 
 ## What it writes
