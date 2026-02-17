@@ -1252,24 +1252,26 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 }
 
 func discoverSchemasWithProgress(ctx context.Context, disc discovery.Discoverer) ([]discovery.SchemaInfo, error) {
-	fmt.Println("Discovering schemas...")
+	fmt.Print("Discovering schemas... ")
 
-	startedAt := time.Now()
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTicker(3 * time.Second)
+		ticker := time.NewTicker(120 * time.Millisecond)
 		defer ticker.Stop()
+		frames := []string{"|", "/", "-", `\`}
+		frameIndex := 0
 
 		for {
 			select {
 			case <-done:
 				return
 			case <-ticker.C:
-				fmt.Printf("  Still discovering schemas... (%s elapsed)\n", time.Since(startedAt).Round(time.Second))
+				fmt.Printf("\rDiscovering schemas... %s", frames[frameIndex])
+				frameIndex = (frameIndex + 1) % len(frames)
 			}
 		}
 	}()
@@ -1278,13 +1280,12 @@ func discoverSchemasWithProgress(ctx context.Context, disc discovery.Discoverer)
 	close(done)
 	wg.Wait()
 
-	elapsed := time.Since(startedAt).Round(time.Millisecond)
 	if err != nil {
-		fmt.Printf("Schema discovery failed after %s.\n", elapsed)
+		fmt.Printf("\rDiscovering schemas... failed\n")
 		return nil, err
 	}
 
-	fmt.Printf("Schema discovery completed in %s.\n", elapsed)
+	fmt.Printf("\rDiscovering schemas... done\n")
 	return schemas, nil
 }
 
