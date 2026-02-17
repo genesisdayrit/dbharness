@@ -101,6 +101,7 @@ type DatabaseConfig struct {
 	User     string
 	Password string
 	SSLMode  string
+	TLS      string
 
 	// Snowflake
 	Account       string

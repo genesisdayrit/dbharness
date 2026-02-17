@@ -130,6 +130,9 @@ type databaseConfig struct {
 	Password string `json:"password,omitempty"`
 	SSLMode  string `json:"sslmode,omitempty"`
 
+	// MySQL-specific
+	TLS string `json:"tls,omitempty"`
+
 	// Snowflake-specific
 	Account       string `json:"account,omitempty"`
 	Role          string `json:"role,omitempty"`
@@ -558,6 +561,7 @@ func runSchemas(args []string) {
 		User:          dbCfg.User,
 		Password:      dbCfg.Password,
 		SSLMode:       dbCfg.SSLMode,
+		TLS:           dbCfg.TLS,
 		Account:       dbCfg.Account,
 		Role:          dbCfg.Role,
 		Warehouse:     dbCfg.Warehouse,
@@ -1066,6 +1070,7 @@ func selectDatabasesForTables(cfg *config, dbCfg *databaseConfig, configPath str
 		User:          dbCfg.User,
 		Password:      dbCfg.Password,
 		SSLMode:       dbCfg.SSLMode,
+		TLS:           dbCfg.TLS,
 		Account:       dbCfg.Account,
 		Role:          dbCfg.Role,
 		Warehouse:     dbCfg.Warehouse,
@@ -1340,6 +1345,7 @@ func toDiscoveryConfig(dbCfg databaseConfig) discovery.DatabaseConfig {
 		User:          dbCfg.User,
 		Password:      dbCfg.Password,
 		SSLMode:       dbCfg.SSLMode,
+		TLS:           dbCfg.TLS,
 		Account:       dbCfg.Account,
 		Role:          dbCfg.Role,
 		Warehouse:     dbCfg.Warehouse,
@@ -1369,6 +1375,7 @@ func ensureDefaultDatabaseForSchemas(cfg *config, dbCfg *databaseConfig, configP
 		User:          dbCfg.User,
 		Password:      dbCfg.Password,
 		SSLMode:       dbCfg.SSLMode,
+		TLS:           dbCfg.TLS,
 		Account:       dbCfg.Account,
 		Role:          dbCfg.Role,
 		Warehouse:     dbCfg.Warehouse,
@@ -1467,6 +1474,7 @@ func runUpdateDatabases(args []string) {
 		User:          dbCfg.User,
 		Password:      dbCfg.Password,
 		SSLMode:       dbCfg.SSLMode,
+		TLS:           dbCfg.TLS,
 		Account:       dbCfg.Account,
 		Role:          dbCfg.Role,
 		Warehouse:     dbCfg.Warehouse,
@@ -1855,6 +1863,7 @@ func pingMySQL(entry databaseConfig) error {
 	driverCfg.Addr = net.JoinHostPort(strings.TrimSpace(entry.Host), strconv.Itoa(port))
 	driverCfg.DBName = strings.TrimSpace(entry.Database)
 	driverCfg.ParseTime = true
+	driverCfg.TLSConfig = strings.TrimSpace(entry.TLS)
 
 	db, err := sql.Open("mysql", driverCfg.FormatDSN())
 	if err != nil {
@@ -2084,6 +2093,7 @@ func collectMySQLConfig(entry *databaseConfig) {
 	entry.Database = readLine()
 	entry.User = promptStringRequired("User")
 	entry.Password = promptStringRequired("Password")
+	entry.TLS = promptSelect("TLS Mode", []string{"true", "preferred", "skip-verify", "false"})
 }
 
 func addConnectionEntry(targetDir string, firstInit bool) {

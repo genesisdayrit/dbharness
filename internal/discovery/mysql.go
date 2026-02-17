@@ -58,6 +58,7 @@ func buildMySQLDSN(cfg DatabaseConfig, database string) string {
 	driverCfg.Addr = net.JoinHostPort(strings.TrimSpace(cfg.Host), strconv.Itoa(port))
 	driverCfg.DBName = strings.TrimSpace(database)
 	driverCfg.ParseTime = true
+	driverCfg.TLSConfig = strings.TrimSpace(cfg.TLS)
 
 	return driverCfg.FormatDSN()
 }
