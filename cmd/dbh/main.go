@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -769,8 +770,7 @@ func processDatabaseColumns(dbCfg databaseConfig, baseDir, database string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	fmt.Println("Discovering schemas...")
-	schemas, err := disc.Discover(ctx)
+	schemas, err := discoverSchemasWithProgress(ctx, disc)
 	if err != nil {
 		fmt.Printf("Could not discover schemas for %q: %v\n", database, err)
 		return
@@ -1136,8 +1136,7 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 	defer cancel()
 
 	// Discover schemas
-	fmt.Println("Discovering schemas...")
-	schemas, err := disc.Discover(ctx)
+	schemas, err := discoverSchemasWithProgress(ctx, disc)
 	if err != nil {
 		fmt.Printf("Could not discover schemas for %q: %v\n", database, err)
 		return
@@ -1250,6 +1249,43 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 	}
 
 	fmt.Printf("\nProcessed %d table(s) across %d schema(s)\n", tableIndex, len(selectedSchemas))
+}
+
+func discoverSchemasWithProgress(ctx context.Context, disc discovery.Discoverer) ([]discovery.SchemaInfo, error) {
+	fmt.Println("Discovering schemas...")
+
+	startedAt := time.Now()
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				fmt.Printf("  Still discovering schemas... (%s elapsed)\n", time.Since(startedAt).Round(time.Second))
+			}
+		}
+	}()
+
+	schemas, err := disc.Discover(ctx)
+	close(done)
+	wg.Wait()
+
+	elapsed := time.Since(startedAt).Round(time.Millisecond)
+	if err != nil {
+		fmt.Printf("Schema discovery failed after %s.\n", elapsed)
+		return nil, err
+	}
+
+	fmt.Printf("Schema discovery completed in %s.\n", elapsed)
+	return schemas, nil
 }
 
 // promptMultiSelectWithAll shows a multi-select prompt with a "Select all" option.
