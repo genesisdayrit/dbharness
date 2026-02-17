@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
 func TestFormatValue(t *testing.T) {
@@ -133,5 +135,48 @@ func TestShouldSkipColumnSamples(t *testing.T) {
 	}
 	if shouldSkipColumnSamples("VARCHAR") {
 		t.Fatalf("non-vector columns should not skip sample values")
+	}
+}
+
+func TestQuoteMySQLIdentifier(t *testing.T) {
+	got := quoteMySQLIdentifier("orders")
+	if got != "`orders`" {
+		t.Fatalf("quoteMySQLIdentifier(simple) = %q, want %q", got, "`orders`")
+	}
+
+	got = quoteMySQLIdentifier("order`items")
+	if got != "`order``items`" {
+		t.Fatalf("quoteMySQLIdentifier(escaped) = %q, want %q", got, "`order``items`")
+	}
+}
+
+func TestBuildMySQLDSN_DefaultPortAndParseTime(t *testing.T) {
+	cfg := DatabaseConfig{
+		Host:     "localhost",
+		User:     "app",
+		Password: "pa:ss@word",
+		Port:     0,
+	}
+
+	dsn := buildMySQLDSN(cfg, "analytics")
+	parsed, err := mysqlDriver.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("ParseDSN() error = %v", err)
+	}
+
+	if parsed.User != "app" {
+		t.Fatalf("dsn user = %q, want %q", parsed.User, "app")
+	}
+	if parsed.Passwd != "pa:ss@word" {
+		t.Fatalf("dsn password = %q, want %q", parsed.Passwd, "pa:ss@word")
+	}
+	if parsed.Addr != "localhost:3306" {
+		t.Fatalf("dsn addr = %q, want %q", parsed.Addr, "localhost:3306")
+	}
+	if parsed.DBName != "analytics" {
+		t.Fatalf("dsn database = %q, want %q", parsed.DBName, "analytics")
+	}
+	if !parsed.ParseTime {
+		t.Fatalf("dsn parseTime = false, want true")
 	}
 }

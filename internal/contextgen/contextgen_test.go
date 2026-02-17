@@ -51,6 +51,7 @@ func TestGenerate_RequiresDefaultDatabaseSelectionWhenMissing(t *testing.T) {
 	}{
 		{name: "postgres", databaseType: "postgres"},
 		{name: "snowflake", databaseType: "snowflake"},
+		{name: "mysql", databaseType: "mysql"},
 	}
 
 	schemas := []discovery.SchemaInfo{

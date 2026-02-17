@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	"github.com/genesisdayrit/dbharness/internal/contextgen"
 	"github.com/genesisdayrit/dbharness/internal/discovery"
 	"github.com/genesisdayrit/dbharness/internal/template"
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	"github.com/snowflakedb/gosnowflake"
 	"gopkg.in/yaml.v3"
@@ -1624,7 +1626,7 @@ func sanitizeSchemaName(name string) string {
 
 func requiresExplicitDatabaseSelection(databaseType string) bool {
 	switch strings.ToLower(strings.TrimSpace(databaseType)) {
-	case "postgres", "snowflake":
+	case "postgres", "snowflake", "mysql":
 		return true
 	default:
 		return false
@@ -1758,6 +1760,8 @@ func pingDatabase(entry databaseConfig) error {
 		return pingPostgres(entry)
 	case "snowflake":
 		return pingSnowflake(entry)
+	case "mysql":
+		return pingMySQL(entry)
 	default:
 		return fmt.Errorf("unsupported database type %q", entry.Type)
 	}
@@ -1833,6 +1837,36 @@ func pingSnowflake(entry databaseConfig) error {
 
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping snowflake: %w", err)
+	}
+
+	return nil
+}
+
+func pingMySQL(entry databaseConfig) error {
+	port := entry.Port
+	if port <= 0 {
+		port = 3306
+	}
+
+	driverCfg := mysqlDriver.NewConfig()
+	driverCfg.User = entry.User
+	driverCfg.Passwd = entry.Password
+	driverCfg.Net = "tcp"
+	driverCfg.Addr = net.JoinHostPort(strings.TrimSpace(entry.Host), strconv.Itoa(port))
+	driverCfg.DBName = strings.TrimSpace(entry.Database)
+	driverCfg.ParseTime = true
+
+	db, err := sql.Open("mysql", driverCfg.FormatDSN())
+	if err != nil {
+		return fmt.Errorf("open mysql connection: %w", err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping mysql: %w", err)
 	}
 
 	return nil
@@ -2043,6 +2077,15 @@ func collectSnowflakeConfig(entry *databaseConfig) {
 	entry.Schema = readLine()
 }
 
+func collectMySQLConfig(entry *databaseConfig) {
+	entry.Host = promptStringRequired("Host")
+	entry.Port = promptInt("Port (press Enter for 3306)", 3306)
+	fmt.Print("Default database (optional, press Enter to skip): ")
+	entry.Database = readLine()
+	entry.User = promptStringRequired("User")
+	entry.Password = promptStringRequired("Password")
+}
+
 func addConnectionEntry(targetDir string, firstInit bool) {
 	configPath := filepath.Join(targetDir, "config.json")
 	cfg, err := readConfig(configPath)
@@ -2060,7 +2103,7 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		fmt.Printf("  %q already exists, choose another.\n", name)
 	}
 
-	dbType := promptSelect("Database type", []string{"postgres", "snowflake"})
+	dbType := promptSelect("Database type", []string{"postgres", "snowflake", "mysql"})
 	environment := promptSelect("Environment", []string{
 		"production", "staging", "development", "local", "testing", "(skip for now)",
 	})
@@ -2079,6 +2122,8 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		collectPostgresConfig(&entry)
 	case "snowflake":
 		collectSnowflakeConfig(&entry)
+	case "mysql":
+		collectMySQLConfig(&entry)
 	}
 
 	primary := firstInit
