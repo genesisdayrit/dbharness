@@ -23,6 +23,7 @@ import (
 	"github.com/genesisdayrit/dbharness/internal/template"
 	_ "github.com/lib/pq"
 	"github.com/snowflakedb/gosnowflake"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -62,6 +63,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh snapshot config")
 	fmt.Fprintln(os.Stderr, "  dbh ls -c")
 	fmt.Fprintln(os.Stderr, "  dbh set-default -c")
+	fmt.Fprintln(os.Stderr, "  dbh set-default -d")
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh tables [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh update-databases [-s name]")
@@ -233,6 +235,8 @@ func runSetDefault(args []string) {
 	flags := flag.NewFlagSet("set-default", flag.ExitOnError)
 	shortConnections := flags.Bool("c", false, "Select and set the primary connection.")
 	longConnections := flags.Bool("connections", false, "Select and set the primary connection.")
+	shortDatabase := flags.Bool("d", false, "Select and set the default database for the primary connection using _databases.yml.")
+	longDatabase := flags.Bool("database", false, "Select and set the default database for the primary connection using _databases.yml.")
 	_ = flags.Parse(args)
 
 	if flags.NArg() > 0 {
@@ -240,11 +244,23 @@ func runSetDefault(args []string) {
 		os.Exit(2)
 	}
 
-	if !*shortConnections && !*longConnections {
-		fmt.Fprintln(os.Stderr, "set-default requires -c or --connections")
+	setConnections := *shortConnections || *longConnections
+	setDatabase := *shortDatabase || *longDatabase
+
+	if setConnections == setDatabase {
+		fmt.Fprintln(os.Stderr, "set-default requires exactly one of -c/--connections or -d/--database")
 		os.Exit(2)
 	}
 
+	if setConnections {
+		runSetDefaultConnection()
+		return
+	}
+
+	runSetDefaultDatabase()
+}
+
+func runSetDefaultConnection() {
 	configPath := filepath.Join(".", ".dbharness", "config.json")
 	cfg, err := readConfig(configPath)
 	if err != nil {
@@ -290,6 +306,197 @@ func runSetDefault(args []string) {
 	}
 
 	fmt.Printf("Primary default connection switched from %q to %q in %s\n", previousPrimary, selected, absConfigPath)
+}
+
+const keepCurrentDefaultSelectionValue = "__keep_current_default_database__"
+
+type databasesCatalog struct {
+	DatabaseType    string
+	DefaultDatabase string
+	Databases       []string
+}
+
+func runSetDefaultDatabase() {
+	baseDir := filepath.Join(".", ".dbharness")
+	configPath := filepath.Join(baseDir, "config.json")
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	primary, err := findPrimaryConnection(cfg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	databasesPath := filepath.Join(baseDir, "context", "connections", primary.Name, "databases", "_databases.yml")
+	catalog, err := readDatabasesCatalog(databasesPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			absDatabasesPath, _ := filepath.Abs(databasesPath)
+			fmt.Fprintf(
+				os.Stderr,
+				"could not read %s: run \"dbh update-databases -s %s\" first to create it\n",
+				absDatabasesPath,
+				primary.Name,
+			)
+			os.Exit(1)
+		}
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if len(catalog.Databases) == 0 {
+		fmt.Fprintf(os.Stderr, "no databases listed in %s\n", databasesPath)
+		os.Exit(1)
+	}
+
+	currentDefault := resolveCurrentDefaultDatabase(primary.Database, catalog.DefaultDatabase)
+	if currentDefault == "" {
+		fmt.Printf("No default database is currently configured for connection %q.\n", primary.Name)
+	} else {
+		fmt.Printf("Current default database for connection %q: %q\n", primary.Name, currentDefault)
+	}
+
+	selected, err := promptSelectDefaultDatabase(currentDefault, catalog.Databases)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "select default database: %v\n", err)
+		os.Exit(1)
+	}
+
+	if selected == keepCurrentDefaultSelectionValue {
+		fmt.Println("Keeping existing default database.")
+		return
+	}
+
+	selected = strings.TrimSpace(selected)
+	if selected == "" {
+		fmt.Fprintln(os.Stderr, "selected default database cannot be empty")
+		os.Exit(1)
+	}
+
+	configNeedsUpdate := strings.TrimSpace(primary.Database) != selected
+	databasesNeedsUpdate := strings.TrimSpace(catalog.DefaultDatabase) != selected
+
+	if configNeedsUpdate {
+		updated, err := setConnectionDefaultDatabase(&cfg, primary.Name, selected)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if updated {
+			if err := writeConfig(configPath, cfg); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
+	}
+
+	if databasesNeedsUpdate {
+		databaseType := strings.TrimSpace(catalog.DatabaseType)
+		if databaseType == "" {
+			databaseType = primary.Type
+		}
+		if err := writeDefaultDatabaseToDatabasesFile(baseDir, primary.Name, databaseType, selected, catalog.Databases); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
+	if !configNeedsUpdate && !databasesNeedsUpdate {
+		fmt.Printf("Default database for connection %q is already %q.\n", primary.Name, selected)
+		return
+	}
+
+	absConfigPath, _ := filepath.Abs(configPath)
+	absDatabasesPath, _ := filepath.Abs(databasesPath)
+	if configNeedsUpdate {
+		fmt.Printf("Updated default database to %q in %s\n", selected, absConfigPath)
+	}
+	if databasesNeedsUpdate {
+		fmt.Printf("Updated default database to %q in %s\n", selected, absDatabasesPath)
+	}
+}
+
+func resolveCurrentDefaultDatabase(configDefault, fileDefault string) string {
+	if current := strings.TrimSpace(configDefault); current != "" {
+		return current
+	}
+	fileDefault = strings.TrimSpace(fileDefault)
+	if fileDefault == "" || fileDefault == "_default" {
+		return ""
+	}
+	return fileDefault
+}
+
+func promptSelectDefaultDatabase(currentDefault string, databases []string) (string, error) {
+	databases = normalizeDatabaseNames(databases)
+	if len(databases) == 0 {
+		return "", fmt.Errorf("no databases available to select")
+	}
+
+	options := make([]huh.Option[string], 0, len(databases)+1)
+	if strings.TrimSpace(currentDefault) != "" {
+		label := fmt.Sprintf("Keep current default database (%s)", currentDefault)
+		options = append(options, huh.NewOption(label, keepCurrentDefaultSelectionValue))
+	}
+	for _, database := range databases {
+		options = append(options, huh.NewOption(database, database))
+	}
+
+	var selected string
+	if err := huh.NewSelect[string]().
+		Title("Select a default database").
+		Options(options...).
+		Value(&selected).
+		Run(); err != nil {
+		return "", err
+	}
+
+	selected = strings.TrimSpace(selected)
+	if selected == "" {
+		return "", fmt.Errorf("no option selected")
+	}
+	return selected, nil
+}
+
+func readDatabasesCatalog(path string) (databasesCatalog, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return databasesCatalog{}, fmt.Errorf("read _databases.yml: %w", err)
+	}
+
+	var file contextgen.DatabasesFile
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		return databasesCatalog{}, fmt.Errorf("parse _databases.yml: %w", err)
+	}
+
+	names := make([]string, 0, len(file.Databases))
+	for _, item := range file.Databases {
+		names = append(names, item.Name)
+	}
+
+	return databasesCatalog{
+		DatabaseType:    strings.TrimSpace(file.DatabaseType),
+		DefaultDatabase: strings.TrimSpace(file.DefaultDatabase),
+		Databases:       normalizeDatabaseNames(names),
+	}, nil
+}
+
+func writeDefaultDatabaseToDatabasesFile(baseDir, connectionName, databaseType, defaultDatabase string, databases []string) error {
+	opts := contextgen.Options{
+		ConnectionName: connectionName,
+		DatabaseName:   defaultDatabase,
+		DatabaseType:   databaseType,
+		BaseDir:        baseDir,
+	}
+
+	if _, err := contextgen.UpdateDatabasesFile(databases, opts); err != nil {
+		return fmt.Errorf("update _databases.yml: %w", err)
+	}
+	return nil
 }
 
 func runSchemas(args []string) {

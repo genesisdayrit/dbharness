@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -281,5 +282,128 @@ func TestSetPrimaryConnectionMissingConnection(t *testing.T) {
 	}
 	if cfg.Connections[1].Primary {
 		t.Fatalf("beta should remain non-primary after error")
+	}
+}
+
+func TestResolveCurrentDefaultDatabase(t *testing.T) {
+	tests := []struct {
+		name          string
+		configDefault string
+		fileDefault   string
+		want          string
+	}{
+		{
+			name:          "config default wins",
+			configDefault: "analytics",
+			fileDefault:   "reporting",
+			want:          "analytics",
+		},
+		{
+			name:          "fallback to file default",
+			configDefault: "",
+			fileDefault:   "reporting",
+			want:          "reporting",
+		},
+		{
+			name:          "default marker treated as empty",
+			configDefault: "",
+			fileDefault:   "_default",
+			want:          "",
+		},
+		{
+			name:          "blank defaults return empty",
+			configDefault: "   ",
+			fileDefault:   "   ",
+			want:          "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveCurrentDefaultDatabase(tt.configDefault, tt.fileDefault)
+			if got != tt.want {
+				t.Fatalf("resolveCurrentDefaultDatabase(%q, %q) = %q, want %q", tt.configDefault, tt.fileDefault, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadDatabasesCatalog(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "_databases.yml")
+	content := `# Header comment
+connection: warehouse
+database_type: postgres
+default_database: reporting
+generated_at: "2026-02-17T10:00:00Z"
+databases:
+  - name: reporting
+  - name: analytics
+  - name: reporting
+  - name: "  "
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write databases file: %v", err)
+	}
+
+	got, err := readDatabasesCatalog(path)
+	if err != nil {
+		t.Fatalf("readDatabasesCatalog(...) error = %v", err)
+	}
+
+	if got.DatabaseType != "postgres" {
+		t.Fatalf("DatabaseType = %q, want %q", got.DatabaseType, "postgres")
+	}
+	if got.DefaultDatabase != "reporting" {
+		t.Fatalf("DefaultDatabase = %q, want %q", got.DefaultDatabase, "reporting")
+	}
+
+	wantDatabases := []string{"analytics", "reporting"}
+	if !reflect.DeepEqual(got.Databases, wantDatabases) {
+		t.Fatalf("Databases = %#v, want %#v", got.Databases, wantDatabases)
+	}
+}
+
+func TestWriteDefaultDatabaseToDatabasesFile(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	databasesDir := filepath.Join(baseDir, "context", "connections", "primary", "databases")
+	if err := os.MkdirAll(databasesDir, 0o755); err != nil {
+		t.Fatalf("mkdir databases dir: %v", err)
+	}
+
+	seedPath := filepath.Join(databasesDir, "_databases.yml")
+	seedContent := `connection: primary
+database_type: postgres
+default_database: myapp
+generated_at: "2026-02-16T00:00:00Z"
+databases:
+  - name: myapp
+  - name: analytics
+`
+	if err := os.WriteFile(seedPath, []byte(seedContent), 0o644); err != nil {
+		t.Fatalf("write seed databases file: %v", err)
+	}
+
+	if err := writeDefaultDatabaseToDatabasesFile(
+		baseDir,
+		"primary",
+		"postgres",
+		"analytics",
+		[]string{"myapp", "analytics"},
+	); err != nil {
+		t.Fatalf("writeDefaultDatabaseToDatabasesFile(...) error = %v", err)
+	}
+
+	got, err := readDatabasesCatalog(seedPath)
+	if err != nil {
+		t.Fatalf("readDatabasesCatalog(...) error = %v", err)
+	}
+
+	if got.DefaultDatabase != "analytics" {
+		t.Fatalf("DefaultDatabase = %q, want %q", got.DefaultDatabase, "analytics")
+	}
+	wantDatabases := []string{"analytics", "myapp"}
+	if !reflect.DeepEqual(got.Databases, wantDatabases) {
+		t.Fatalf("Databases = %#v, want %#v", got.Databases, wantDatabases)
 	}
 }
