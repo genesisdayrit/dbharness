@@ -550,8 +550,14 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 		selectedSet[s] = true
 	}
 
-	// Process each selected schema
-	var allTableInputs []contextgen.TableDetailInput
+	// Generate context files — write each table immediately after discovery
+	opts := contextgen.Options{
+		ConnectionName: dbCfg.Name,
+		DatabaseName:   database,
+		DatabaseType:   dbCfg.Type,
+		BaseDir:        baseDir,
+	}
+
 	totalTables := 0
 
 	for _, schema := range schemas {
@@ -585,46 +591,18 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 				input.Sample = sample
 			}
 
-			allTableInputs = append(allTableInputs, input)
+			// Write files for this table immediately
+			if err := contextgen.GenerateTableDetails([]contextgen.TableDetailInput{input}, opts); err != nil {
+				fmt.Printf("  Error generating files for %s.%s: %v\n", schema.Name, table.Name, err)
+				continue
+			}
+			fmt.Printf("  Wrote %s.%s\n", schema.Name, table.Name)
 		}
 	}
 
-	if len(allTableInputs) == 0 {
+	if totalTables == 0 {
 		fmt.Println("No tables to process.")
 		return
-	}
-
-	// Generate context files
-	opts := contextgen.Options{
-		ConnectionName: dbCfg.Name,
-		DatabaseName:   database,
-		DatabaseType:   dbCfg.Type,
-		BaseDir:        baseDir,
-	}
-
-	fmt.Printf("\nGenerating context files for %d table(s)...\n", len(allTableInputs))
-
-	if err := contextgen.GenerateTableDetails(allTableInputs, opts); err != nil {
-		fmt.Printf("Error generating files: %v\n", err)
-		return
-	}
-
-	dbName := sanitizeSchemaName(database)
-	schemasDir := filepath.Join(baseDir, "context", "connections", dbCfg.Name, "databases", dbName, "schemas")
-	absPath, _ := filepath.Abs(schemasDir)
-	fmt.Printf("Table context files written to %s\n\n", absPath)
-
-	fmt.Println("Files generated:")
-	for _, t := range allTableInputs {
-		schemaDir := sanitizeSchemaName(t.Schema)
-		tableDir := sanitizeSchemaName(t.Table)
-		dir := filepath.Join(schemasDir, schemaDir, tableDir)
-		if t.Columns != nil {
-			fmt.Printf("  %s/%s__columns.yml\n", dir, tableDir)
-		}
-		if t.Sample != nil && len(t.Sample.Rows) > 0 {
-			fmt.Printf("  %s/%s__sample.xml\n", dir, tableDir)
-		}
 	}
 
 	fmt.Printf("\nProcessed %d table(s) across %d schema(s)\n", totalTables, len(selectedSchemas))
