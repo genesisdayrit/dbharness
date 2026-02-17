@@ -123,6 +123,7 @@ type databaseConfig struct {
 	// Shared
 	Database string `json:"database,omitempty"`
 	User     string `json:"user"`
+	Schema   string `json:"schema,omitempty"`
 
 	// Postgres-specific
 	Host     string `json:"host,omitempty"`
@@ -137,8 +138,7 @@ type databaseConfig struct {
 	Account       string `json:"account,omitempty"`
 	Role          string `json:"role,omitempty"`
 	Warehouse     string `json:"warehouse,omitempty"`
-	Schema        string `json:"schema,omitempty"`
-	Authenticator string `json:"authenticator,omitempty"`
+	Authenticator string `json:"authenticator,omitempty"}`
 }
 
 func runTestConnection(args []string) {
@@ -2091,6 +2091,8 @@ func collectMySQLConfig(entry *databaseConfig) {
 	entry.Port = promptInt("Port (press Enter for 3306)", 3306)
 	fmt.Print("Default database (optional, press Enter to skip): ")
 	entry.Database = readLine()
+	fmt.Print("Default schema (optional, press Enter to skip): ")
+	entry.Schema = readLine()
 	entry.User = promptStringRequired("User")
 	entry.Password = promptStringRequired("Password")
 	entry.TLS = promptSelect("TLS Mode", []string{"true", "preferred", "skip-verify", "false"})
