@@ -141,8 +141,11 @@ func TestGenerate_SortsSchemasAndTablesAndIncludesTableDetails(t *testing.T) {
 	if analytics.Tables[1].Name != "users" || analytics.Tables[1].Type != "BASE TABLE" {
 		t.Fatalf("second analytics table = %+v, want users BASE TABLE", analytics.Tables[1])
 	}
-	if analytics.Tables[0].Description != "" || analytics.Tables[1].Description != "" {
-		t.Fatalf("analytics table descriptions should be blank placeholders, got %+v", analytics.Tables)
+	if analytics.Tables[0].AIDescription != "" || analytics.Tables[1].AIDescription != "" {
+		t.Fatalf("analytics table ai_description should be blank placeholders, got %+v", analytics.Tables)
+	}
+	if analytics.Tables[0].DBDescription != "" || analytics.Tables[1].DBDescription != "" {
+		t.Fatalf("analytics table db_description should be blank placeholders, got %+v", analytics.Tables)
 	}
 
 	zeta := sf.Schemas[1]
@@ -444,7 +447,8 @@ func TestWriteEnrichedColumnsFile_WritesEnrichedMetrics(t *testing.T) {
 				IsNullable:            "NO",
 				OrdinalPosition:       1,
 				ColumnDefault:         "nextval('users_id_seq'::regclass)",
-				Description:           "",
+				AIDescription:         "",
+				DBDescription:         "",
 				TotalRows:             200,
 				NullCount:             0,
 				NonNullCount:          200,
@@ -459,7 +463,8 @@ func TestWriteEnrichedColumnsFile_WritesEnrichedMetrics(t *testing.T) {
 				DataType:              "character varying",
 				IsNullable:            "YES",
 				OrdinalPosition:       2,
-				Description:           "",
+				AIDescription:         "",
+				DBDescription:         "",
 				TotalRows:             200,
 				NullCount:             20,
 				NonNullCount:          180,
@@ -506,14 +511,21 @@ func TestWriteEnrichedColumnsFile_WritesEnrichedMetrics(t *testing.T) {
 	if file.Columns[1].NullOfTotalRowsPct != 10 {
 		t.Fatalf("second column null pct = %v, want 10", file.Columns[1].NullOfTotalRowsPct)
 	}
-	if file.Columns[1].Description != "" {
-		t.Fatalf("description should be blank placeholder, got %q", file.Columns[1].Description)
+	if file.Columns[1].AIDescription != "" {
+		t.Fatalf("ai_description should be blank placeholder, got %q", file.Columns[1].AIDescription)
+	}
+	if file.Columns[1].DBDescription != "" {
+		t.Fatalf("db_description should be blank placeholder, got %q", file.Columns[1].DBDescription)
 	}
 	if !strings.Contains(string(data), "Enriched columns for table: public.users") {
 		t.Fatalf("expected enriched header comment in file")
 	}
-	if !strings.Contains(string(data), `description: ""`) {
-		t.Fatalf(`expected explicit blank description field in YAML, got:
+	if !strings.Contains(string(data), `ai_description: ""`) {
+		t.Fatalf(`expected explicit blank ai_description field in YAML, got:
+%s`, string(data))
+	}
+	if !strings.Contains(string(data), `db_description: ""`) {
+		t.Fatalf(`expected explicit blank db_description field in YAML, got:
 %s`, string(data))
 	}
 }

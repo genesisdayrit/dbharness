@@ -47,28 +47,35 @@ schemas:
   - name: analytics
     table_count: 5
     view_count: 2
-    description: ""
+    ai_description: ""
+    db_description: ""
     tables:
       - name: events
         type: BASE TABLE
-        description: ""
+        ai_description: ""
+        db_description: ""
       - name: sessions
         type: BASE TABLE
-        description: ""
+        ai_description: ""
+        db_description: ""
   - name: public
     table_count: 12
     view_count: 3
-    description: ""
+    ai_description: ""
+    db_description: ""
     tables:
       - name: orders
         type: BASE TABLE
-        description: ""
+        ai_description: ""
+        db_description: ""
       - name: products
         type: BASE TABLE
-        description: ""
+        ai_description: ""
+        db_description: ""
       - name: users
         type: BASE TABLE
-        description: ""
+        ai_description: ""
+        db_description: ""
 ```
 
 ### _tables.yml (per schema)
@@ -84,23 +91,27 @@ generated_at: "2026-02-12T15:30:00Z"
 tables:
   - name: users
     type: BASE TABLE
-    description: ""
+    ai_description: ""
+    db_description: ""
   - name: orders
     type: BASE TABLE
-    description: ""
+    ai_description: ""
+    db_description: ""
   - name: daily_summary
     type: VIEW
-    description: ""
+    ai_description: ""
+    db_description: ""
 ```
 
 ## Description fields
 
-The `description` fields in both `_schemas.yml` and `_tables.yml` are generated empty by default. They serve as placeholders that can be populated later with:
+Both `_schemas.yml` and `_tables.yml` include two separate description concepts:
 
-- Human-written descriptions
-- LLM-generated descriptions (planned for a future release)
+- `ai_description`: intended for AI-authored context text.
+- `db_description`: intended for database-native descriptions/comments.
 
-Descriptions help LLMs understand what each schema and table contains without having to inspect the actual data.
+Both fields are generated as empty strings when no description data is available.
+Keeping these fields separate avoids mixing generated narrative (`ai_description`) with source-of-truth metadata (`db_description`).
 
 > **Note:** The `_databases.yml` file does not have description fields yet. This may be added in a future release.
 

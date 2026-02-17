@@ -19,7 +19,8 @@ func newEnrichedColumnInfo(column ColumnInfo) EnrichedColumnInfo {
 		IsNullable:      column.IsNullable,
 		OrdinalPosition: column.OrdinalPosition,
 		ColumnDefault:   column.ColumnDefault,
-		Description:     "",
+		AIDescription:   "",
+		DBDescription:   "",
 	}
 }
 

@@ -47,18 +47,20 @@ type SchemasFile struct {
 
 // SchemaItem is one entry in the top-level schemas.yml.
 type SchemaItem struct {
-	Name        string            `yaml:"name"`
-	TableCount  int               `yaml:"table_count"`
-	ViewCount   int               `yaml:"view_count"`
-	Description string            `yaml:"description"` // blank; placeholder for LLM-generated descriptions
-	Tables      []SchemaTableItem `yaml:"tables"`
+	Name          string            `yaml:"name"`
+	TableCount    int               `yaml:"table_count"`
+	ViewCount     int               `yaml:"view_count"`
+	AIDescription string            `yaml:"ai_description"` // blank; placeholder for AI-generated descriptions
+	DBDescription string            `yaml:"db_description"` // DB-native description/comment (if available)
+	Tables        []SchemaTableItem `yaml:"tables"`
 }
 
 // SchemaTableItem is one table/view entry in a schema listing.
 type SchemaTableItem struct {
-	Name        string `yaml:"name"`
-	Type        string `yaml:"type"`
-	Description string `yaml:"description"` // blank; placeholder for LLM-generated descriptions
+	Name          string `yaml:"name"`
+	Type          string `yaml:"type"`
+	AIDescription string `yaml:"ai_description"` // blank; placeholder for AI-generated descriptions
+	DBDescription string `yaml:"db_description"` // DB-native description/comment (if available)
 }
 
 // TablesFile is written inside each <schema>/_tables.yml and provides
@@ -74,9 +76,10 @@ type TablesFile struct {
 
 // TablesEntry is one row in a tables.yml file.
 type TablesEntry struct {
-	Name        string `yaml:"name"`
-	Type        string `yaml:"type"`        // BASE TABLE, VIEW, etc.
-	Description string `yaml:"description"` // blank placeholder
+	Name          string `yaml:"name"`
+	Type          string `yaml:"type"` // BASE TABLE, VIEW, etc.
+	AIDescription string `yaml:"ai_description"`
+	DBDescription string `yaml:"db_description"`
 }
 
 // --------------------------------------------------------------------------
@@ -140,14 +143,16 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 
 	for _, s := range sortedSchemas {
 		item := SchemaItem{
-			Name:        s.Name,
-			Description: "",
+			Name:          s.Name,
+			AIDescription: "",
+			DBDescription: "",
 		}
 		for _, t := range s.Tables {
 			item.Tables = append(item.Tables, SchemaTableItem{
-				Name:        t.Name,
-				Type:        t.TableType,
-				Description: "",
+				Name:          t.Name,
+				Type:          t.TableType,
+				AIDescription: "",
+				DBDescription: "",
 			})
 			switch {
 			case isView(t.TableType):
@@ -180,9 +185,10 @@ func Generate(schemas []discovery.SchemaInfo, opts Options) error {
 		}
 		for _, t := range s.Tables {
 			tf.Tables = append(tf.Tables, TablesEntry{
-				Name:        t.Name,
-				Type:        t.TableType,
-				Description: "",
+				Name:          t.Name,
+				Type:          t.TableType,
+				AIDescription: "",
+				DBDescription: "",
 			})
 		}
 
@@ -304,7 +310,8 @@ type EnrichedColumnsFileItem struct {
 	IsNullable            string   `yaml:"is_nullable"`
 	OrdinalPosition       int      `yaml:"ordinal_position"`
 	ColumnDefault         string   `yaml:"column_default,omitempty"`
-	Description           string   `yaml:"description"`
+	AIDescription         string   `yaml:"ai_description"`
+	DBDescription         string   `yaml:"db_description"`
 	TotalRows             int64    `yaml:"total_rows"`
 	NullCount             int64    `yaml:"null_count"`
 	NonNullCount          int64    `yaml:"non_null_count"`
@@ -495,7 +502,8 @@ func WriteEnrichedColumnsFile(input EnrichedColumnsInput, opts Options) (string,
 			IsNullable:            column.IsNullable,
 			OrdinalPosition:       column.OrdinalPosition,
 			ColumnDefault:         column.ColumnDefault,
-			Description:           column.Description,
+			AIDescription:         column.AIDescription,
+			DBDescription:         column.DBDescription,
 			TotalRows:             column.TotalRows,
 			NullCount:             column.NullCount,
 			NonNullCount:          column.NonNullCount,
@@ -590,8 +598,10 @@ func schemasHeader(opts Options) string {
 # To explore a specific schema, navigate into the schema subdirectory.
 # Each schema directory contains a _tables.yml with its table listing.
 #
-# The "description" fields are empty by default. They can be populated
-# with LLM-generated or human-written descriptions for richer context.
+# Description fields:
+#   ai_description - Intended for AI-authored descriptions.
+#   db_description - Intended for database-native descriptions/comments.
+# Both are empty when no description data is available.
 # =============================================================================
 
 `, opts.ConnectionName, opts.DatabaseName, opts.DatabaseType)
@@ -605,8 +615,10 @@ func tablesHeader(opts Options, schemaName string) string {
 #
 # This file lists all tables and views in the "%s" schema.
 #
-# The "description" fields are empty by default. They can be populated
-# with LLM-generated or human-written descriptions for richer context.
+# Description fields:
+#   ai_description - Intended for AI-authored descriptions.
+#   db_description - Intended for database-native descriptions/comments.
+# Both are empty when no description data is available.
 # =============================================================================
 
 `, schemaName, opts.ConnectionName, opts.DatabaseName, opts.DatabaseType, schemaName)
@@ -659,7 +671,8 @@ func enrichedColumnsHeader(opts Options, database, schema, table string) string 
 #   is_nullable                - Whether NULL is allowed (YES/NO)
 #   ordinal_position           - Column position in the table
 #   column_default             - Default expression (if any)
-#   description                - Blank placeholder for future AI descriptions
+#   ai_description             - Blank placeholder for future AI descriptions
+#   db_description             - Database-native description/comment (if available)
 #   total_rows                 - Total rows in table at profiling time
 #   null_count                 - Rows where this column is NULL
 #   non_null_count             - Rows where this column is NOT NULL

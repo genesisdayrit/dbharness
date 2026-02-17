@@ -35,7 +35,8 @@ For each selected table:
 Each column includes:
 
 - base metadata (`name`, `data_type`, `is_nullable`, `ordinal_position`, `column_default`)
-- blank `description` placeholder for future AI-generated text
+- `ai_description` (blank placeholder for future AI-generated text)
+- `db_description` (database-native description/comment when available; blank otherwise)
 - `total_rows`
 - `null_count`
 - `non_null_count`

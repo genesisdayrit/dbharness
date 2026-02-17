@@ -41,7 +41,8 @@ type EnrichedColumnInfo struct {
 	IsNullable      string
 	OrdinalPosition int
 	ColumnDefault   string
-	Description     string
+	AIDescription   string
+	DBDescription   string
 
 	TotalRows             int64
 	NullCount             int64
