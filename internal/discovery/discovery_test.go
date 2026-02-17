@@ -156,6 +156,7 @@ func TestBuildMySQLDSN_DefaultPortAndParseTime(t *testing.T) {
 		User:     "app",
 		Password: "pa:ss@word",
 		Port:     0,
+		TLS:      "true",
 	}
 
 	dsn := buildMySQLDSN(cfg, "analytics")
@@ -178,5 +179,8 @@ func TestBuildMySQLDSN_DefaultPortAndParseTime(t *testing.T) {
 	}
 	if !parsed.ParseTime {
 		t.Fatalf("dsn parseTime = false, want true")
+	}
+	if parsed.TLSConfig != "true" {
+		t.Fatalf("dsn tls = %q, want %q", parsed.TLSConfig, "true")
 	}
 }

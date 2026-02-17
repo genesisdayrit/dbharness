@@ -57,7 +57,7 @@ The following fields are shared across all database types:
 | Field | Required | Default | Notes |
 |-------|----------|---------|-------|
 | Connection name | Yes | — | Must be unique across connections |
-| Database type | Yes | — | Interactive selector: `postgres`, `snowflake` |
+| Database type | Yes | — | Interactive selector: `postgres`, `snowflake`, `mysql` |
 | Environment | No | — | Interactive selector: `production`, `staging`, `development`, `local`, `testing`, or skip |
 
 ### Postgres fields
@@ -83,6 +83,17 @@ The following fields are shared across all database types:
 | Warehouse | Yes | — | |
 | Default database | No | — | Press Enter to skip |
 | Default schema | No | — | Press Enter to skip |
+
+### MySQL fields
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| Host | Yes | — | |
+| Port | No | `3306` | Press Enter to accept default |
+| Default database | No | — | Press Enter to skip |
+| User | Yes | — | |
+| Password | Yes | — | |
+| TLS Mode | Yes | — | Interactive selector: `true`, `preferred`, `skip-verify`, `false` |
 
 ## Snowflake example
 
@@ -213,4 +224,4 @@ Snowflake example (username & password):
 }
 ```
 
-The `environment` field is omitted from the JSON when left blank. Type-specific fields (e.g. `host`, `port`, `sslmode` for Postgres; `account`, `role`, `warehouse`, `schema`, `authenticator` for Snowflake) are omitted when not applicable.
+The `environment` field is omitted from the JSON when left blank. Type-specific fields (e.g. `host`, `port`, `sslmode` for Postgres; `account`, `role`, `warehouse`, `schema`, `authenticator` for Snowflake; `host`, `port`, `tls` for MySQL) are omitted when not applicable.
