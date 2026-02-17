@@ -198,3 +198,88 @@ func TestConnectionHostURL(t *testing.T) {
 		})
 	}
 }
+
+func TestSetPrimaryConnectionSwitchesPrimary(t *testing.T) {
+	cfg := config{
+		Connections: []databaseConfig{
+			{Name: "alpha", Primary: true},
+			{Name: "beta", Primary: false},
+			{Name: "gamma", Primary: false},
+		},
+	}
+
+	previous, changed, err := setPrimaryConnection(&cfg, "beta")
+	if err != nil {
+		t.Fatalf("setPrimaryConnection(...) error = %v", err)
+	}
+	if previous != "alpha" {
+		t.Fatalf("previous primary = %q, want %q", previous, "alpha")
+	}
+	if !changed {
+		t.Fatalf("changed = false, want true")
+	}
+
+	if cfg.Connections[0].Primary {
+		t.Fatalf("alpha should no longer be primary")
+	}
+	if !cfg.Connections[1].Primary {
+		t.Fatalf("beta should be primary")
+	}
+	if cfg.Connections[2].Primary {
+		t.Fatalf("gamma should not be primary")
+	}
+}
+
+func TestSetPrimaryConnectionAlreadyPrimaryNoChange(t *testing.T) {
+	cfg := config{
+		Connections: []databaseConfig{
+			{Name: "alpha", Primary: true},
+			{Name: "beta", Primary: false},
+		},
+	}
+
+	previous, changed, err := setPrimaryConnection(&cfg, "alpha")
+	if err != nil {
+		t.Fatalf("setPrimaryConnection(...) error = %v", err)
+	}
+	if previous != "alpha" {
+		t.Fatalf("previous primary = %q, want %q", previous, "alpha")
+	}
+	if changed {
+		t.Fatalf("changed = true, want false")
+	}
+
+	if !cfg.Connections[0].Primary {
+		t.Fatalf("alpha should remain primary")
+	}
+	if cfg.Connections[1].Primary {
+		t.Fatalf("beta should remain non-primary")
+	}
+}
+
+func TestSetPrimaryConnectionMissingConnection(t *testing.T) {
+	cfg := config{
+		Connections: []databaseConfig{
+			{Name: "alpha", Primary: true},
+			{Name: "beta", Primary: false},
+		},
+	}
+
+	previous, changed, err := setPrimaryConnection(&cfg, "missing")
+	if err == nil {
+		t.Fatalf("setPrimaryConnection(...) error = nil, want non-nil")
+	}
+	if previous != "" {
+		t.Fatalf("previous primary = %q, want empty", previous)
+	}
+	if changed {
+		t.Fatalf("changed = true, want false")
+	}
+
+	if !cfg.Connections[0].Primary {
+		t.Fatalf("alpha should remain primary after error")
+	}
+	if cfg.Connections[1].Primary {
+		t.Fatalf("beta should remain non-primary after error")
+	}
+}

@@ -103,3 +103,13 @@ Output columns:
 - Connection name
 - Database type
 - Host URL (or `-` when unavailable)
+
+### `dbh set-default -c`
+
+Interactively selects a connection and makes it the primary default in `.dbharness/config.json`:
+
+```bash
+dbh set-default -c
+```
+
+The selected connection is set to `"primary": true`, and the previous primary connection is updated to `"primary": false`.
