@@ -40,6 +40,8 @@ func main() {
 		runSnapshot(os.Args[2:])
 	case "ls":
 		runList(os.Args[2:])
+	case "set-default":
+		runSetDefault(os.Args[2:])
 	case "schemas":
 		runSchemas(os.Args[2:])
 	case "tables":
@@ -59,6 +61,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh snapshot")
 	fmt.Fprintln(os.Stderr, "  dbh snapshot config")
 	fmt.Fprintln(os.Stderr, "  dbh ls -c")
+	fmt.Fprintln(os.Stderr, "  dbh set-default -c")
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh tables [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh update-databases [-s name]")
@@ -224,6 +227,69 @@ func runList(args []string) {
 	}
 
 	printConnections(os.Stdout, cfg)
+}
+
+func runSetDefault(args []string) {
+	flags := flag.NewFlagSet("set-default", flag.ExitOnError)
+	shortConnections := flags.Bool("c", false, "Select and set the primary connection.")
+	longConnections := flags.Bool("connections", false, "Select and set the primary connection.")
+	_ = flags.Parse(args)
+
+	if flags.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "set-default does not accept positional arguments")
+		os.Exit(2)
+	}
+
+	if !*shortConnections && !*longConnections {
+		fmt.Fprintln(os.Stderr, "set-default requires -c or --connections")
+		os.Exit(2)
+	}
+
+	configPath := filepath.Join(".", ".dbharness", "config.json")
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if len(cfg.Connections) == 0 {
+		fmt.Fprintln(os.Stderr, "no connections configured in config.json")
+		os.Exit(1)
+	}
+
+	names := make([]string, 0, len(cfg.Connections))
+	for _, conn := range cfg.Connections {
+		names = append(names, conn.Name)
+	}
+
+	selected, err := promptSelectRequired("Select a primary connection", names)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "select primary connection: %v\n", err)
+		os.Exit(1)
+	}
+
+	previousPrimary, changed, err := setPrimaryConnection(&cfg, selected)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if !changed {
+		fmt.Printf("Connection %q is already the primary default.\n", selected)
+		return
+	}
+
+	if err := writeConfig(configPath, cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	absConfigPath, _ := filepath.Abs(configPath)
+	if strings.TrimSpace(previousPrimary) == "" {
+		fmt.Printf("Primary default connection set to %q in %s\n", selected, absConfigPath)
+		return
+	}
+
+	fmt.Printf("Primary default connection switched from %q to %q in %s\n", previousPrimary, selected, absConfigPath)
 }
 
 func runSchemas(args []string) {
@@ -996,6 +1062,43 @@ func setConnectionDefaultDatabase(cfg *config, connectionName, database string) 
 	}
 
 	return false, fmt.Errorf("connection %q not found in config", connectionName)
+}
+
+func setPrimaryConnection(cfg *config, connectionName string) (string, bool, error) {
+	if cfg == nil {
+		return "", false, fmt.Errorf("config cannot be nil")
+	}
+
+	connectionName = strings.TrimSpace(connectionName)
+	if connectionName == "" {
+		return "", false, fmt.Errorf("connection name cannot be empty")
+	}
+
+	selectedIndex := -1
+	previousPrimary := ""
+	for i := range cfg.Connections {
+		if cfg.Connections[i].Name == connectionName {
+			selectedIndex = i
+		}
+		if cfg.Connections[i].Primary && previousPrimary == "" {
+			previousPrimary = cfg.Connections[i].Name
+		}
+	}
+
+	if selectedIndex == -1 {
+		return "", false, fmt.Errorf("connection %q not found in config", connectionName)
+	}
+
+	changed := false
+	for i := range cfg.Connections {
+		shouldBePrimary := i == selectedIndex
+		if cfg.Connections[i].Primary != shouldBePrimary {
+			cfg.Connections[i].Primary = shouldBePrimary
+			changed = true
+		}
+	}
+
+	return previousPrimary, changed, nil
 }
 
 func ensureGitignore() {
