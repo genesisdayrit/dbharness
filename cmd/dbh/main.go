@@ -678,10 +678,14 @@ func runTables(args []string) {
 }
 
 const (
-	minSecondsPerColumnEstimate = 5
-	maxSecondsPerColumnEstimate = 10
-	columnMetadataTimeout       = 60 * time.Second
-	columnEnrichmentTimeout     = 2 * time.Minute
+	minSecondsPerColumnEstimate   = 5
+	maxSecondsPerColumnEstimate   = 10
+	columnMetadataTimeout         = 60 * time.Second
+	columnEnrichmentTimeout       = 2 * time.Minute
+	columnsSchemaDiscoveryTimeout = 2 * time.Minute
+	tableSchemaDiscoveryTimeout   = 2 * time.Minute
+	tableColumnsQueryTimeout      = 60 * time.Second
+	tableSampleRowsQueryTimeout   = 60 * time.Second
 )
 
 type tableColumnTarget struct {
@@ -767,10 +771,9 @@ func processDatabaseColumns(dbCfg databaseConfig, baseDir, database string) {
 	}
 	defer disc.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	schemas, err := discoverSchemasWithProgress(ctx, disc)
+	discoveryCtx, discoveryCancel := context.WithTimeout(context.Background(), columnsSchemaDiscoveryTimeout)
+	schemas, err := discoverSchemasWithProgress(discoveryCtx, disc)
+	discoveryCancel()
 	if err != nil {
 		fmt.Printf("Could not discover schemas for %q: %v\n", database, err)
 		return
@@ -1132,11 +1135,10 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 	}
 	defer disc.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
 	// Discover schemas
-	schemas, err := discoverSchemasWithProgress(ctx, disc)
+	discoveryCtx, discoveryCancel := context.WithTimeout(context.Background(), tableSchemaDiscoveryTimeout)
+	schemas, err := discoverSchemasWithProgress(discoveryCtx, disc)
+	discoveryCancel()
 	if err != nil {
 		fmt.Printf("Could not discover schemas for %q: %v\n", database, err)
 		return
@@ -1216,7 +1218,9 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 			}
 
 			// Get columns
-			cols, err := disc.GetColumns(ctx, schema.Name, table.Name)
+			columnsCtx, columnsCancel := context.WithTimeout(context.Background(), tableColumnsQueryTimeout)
+			cols, err := disc.GetColumns(columnsCtx, schema.Name, table.Name)
+			columnsCancel()
 			if err != nil {
 				fmt.Printf("    Skipping columns for %s.%s: %v\n", schema.Name, table.Name, err)
 			} else {
@@ -1224,7 +1228,9 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 			}
 
 			// Get sample rows
-			sample, err := disc.GetSampleRows(ctx, schema.Name, table.Name, 10)
+			sampleRowsCtx, sampleRowsCancel := context.WithTimeout(context.Background(), tableSampleRowsQueryTimeout)
+			sample, err := disc.GetSampleRows(sampleRowsCtx, schema.Name, table.Name, 10)
+			sampleRowsCancel()
 			if err != nil {
 				fmt.Printf("    Skipping sample for %s.%s: %v\n", schema.Name, table.Name, err)
 			} else {
