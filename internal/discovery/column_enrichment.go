@@ -115,3 +115,7 @@ func quotePostgresIdentifier(identifier string) string {
 func quoteSnowflakeIdentifier(identifier string) string {
 	return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
 }
+
+func quoteMySQLIdentifier(identifier string) string {
+	return "`" + strings.ReplaceAll(identifier, "`", "``") + "`"
+}
