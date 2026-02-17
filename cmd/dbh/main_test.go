@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestInstallTemplateForceCreatesFullSnapshot(t *testing.T) {
@@ -405,5 +407,124 @@ databases:
 	wantDatabases := []string{"analytics", "myapp"}
 	if !reflect.DeepEqual(got.Databases, wantDatabases) {
 		t.Fatalf("Databases = %#v, want %#v", got.Databases, wantDatabases)
+	}
+}
+
+func TestBuildConnectionSelectionArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		connectionName string
+		want           []string
+	}{
+		{
+			name:           "empty name",
+			connectionName: "",
+			want:           nil,
+		},
+		{
+			name:           "whitespace name",
+			connectionName: "   ",
+			want:           nil,
+		},
+		{
+			name:           "provided name",
+			connectionName: "warehouse",
+			want:           []string{"-s", "warehouse"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildConnectionSelectionArgs(tt.connectionName)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("buildConnectionSelectionArgs(%q) = %#v, want %#v", tt.connectionName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunSyncStagesContinuesAfterFailure(t *testing.T) {
+	stages := []syncStage{
+		{Name: "databases", Subcommand: "databases", Description: "stage one"},
+		{Name: "schemas", Subcommand: "schemas", Description: "stage two"},
+		{Name: "tables", Subcommand: "tables", Description: "stage three"},
+	}
+
+	type invocation struct {
+		command string
+		args    []string
+	}
+	var calls []invocation
+	runner := func(command string, args []string) error {
+		argsCopy := append([]string(nil), args...)
+		calls = append(calls, invocation{command: command, args: argsCopy})
+		if command == "schemas" {
+			return errors.New("schema discovery failed")
+		}
+		return nil
+	}
+
+	var out bytes.Buffer
+	results := runSyncStages(stages, []string{"-s", "warehouse"}, runner, &out)
+
+	if len(results) != 3 {
+		t.Fatalf("len(results) = %d, want 3", len(results))
+	}
+	if results[0].Err != nil {
+		t.Fatalf("databases stage should succeed, got err %v", results[0].Err)
+	}
+	if results[1].Err == nil {
+		t.Fatalf("schemas stage should fail")
+	}
+	if results[2].Err != nil {
+		t.Fatalf("tables stage should still run and succeed, got err %v", results[2].Err)
+	}
+
+	wantCalls := []invocation{
+		{command: "databases", args: []string{"-s", "warehouse"}},
+		{command: "schemas", args: []string{"-s", "warehouse"}},
+		{command: "tables", args: []string{"-s", "warehouse"}},
+	}
+	if !reflect.DeepEqual(calls, wantCalls) {
+		t.Fatalf("sync stage invocations = %#v, want %#v", calls, wantCalls)
+	}
+
+	output := out.String()
+	for _, expected := range []string{
+		"[1/3] databases: stage one",
+		"[2/3] schemas: stage two",
+		"[3/3] tables: stage three",
+		"schemas failed",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("expected output to contain %q, got:\n%s", expected, output)
+		}
+	}
+}
+
+func TestPrintSyncSummary(t *testing.T) {
+	results := []syncStageResult{
+		{StageName: "databases", Duration: 250 * time.Millisecond},
+		{StageName: "schemas", Duration: 500 * time.Millisecond, Err: errors.New("boom")},
+		{StageName: "tables", Duration: time.Second},
+	}
+
+	var out bytes.Buffer
+	failed := printSyncSummary(results, &out)
+	if failed != 1 {
+		t.Fatalf("printSyncSummary(...) failed count = %d, want 1", failed)
+	}
+
+	output := out.String()
+	for _, expected := range []string{
+		"Sync summary:",
+		"  - databases: ok (250ms)",
+		"  - schemas: failed (500ms)",
+		"  - tables: ok (1s)",
+		"Sync finished with 1 failed stage(s).",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("expected output to contain %q, got:\n%s", expected, output)
+		}
 	}
 }

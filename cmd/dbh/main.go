@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -46,12 +47,16 @@ func main() {
 		runList(os.Args[2:])
 	case "set-default":
 		runSetDefault(os.Args[2:])
+	case "sync":
+		runSync(os.Args[2:])
 	case "schemas":
 		runSchemas(os.Args[2:])
 	case "tables":
 		runTables(os.Args[2:])
 	case "columns":
 		runColumns(os.Args[2:])
+	case "databases":
+		runUpdateDatabases(os.Args[2:])
 	case "update-databases":
 		runUpdateDatabases(os.Args[2:])
 	default:
@@ -69,10 +74,158 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh ls -c")
 	fmt.Fprintln(os.Stderr, "  dbh set-default -c")
 	fmt.Fprintln(os.Stderr, "  dbh set-default -d")
+	fmt.Fprintln(os.Stderr, "  dbh sync [-s name]")
+	fmt.Fprintln(os.Stderr, "  dbh databases [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh tables [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh columns [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh update-databases [-s name]")
+}
+
+type syncStage struct {
+	Name        string
+	Subcommand  string
+	Description string
+}
+
+type syncStageResult struct {
+	StageName string
+	Duration  time.Duration
+	Err       error
+}
+
+type syncStageRunner func(subcommand string, args []string) error
+
+var defaultSyncStageRunner syncStageRunner = runSelfSubcommand
+
+func runSync(args []string) {
+	flags := flag.NewFlagSet("sync", flag.ExitOnError)
+	shortName := flags.String("s", "", "Connection name from config.json.")
+	longName := flags.String("name", "", "Connection name from config.json.")
+	_ = flags.Parse(args)
+
+	if flags.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "sync does not accept positional arguments")
+		os.Exit(2)
+	}
+
+	name := strings.TrimSpace(*shortName)
+	if name == "" {
+		name = strings.TrimSpace(*longName)
+	}
+
+	stageArgs := buildConnectionSelectionArgs(name)
+	stages := []syncStage{
+		{
+			Name:        "databases",
+			Subcommand:  "databases",
+			Description: "Discover databases and refresh _databases.yml",
+		},
+		{
+			Name:        "schemas",
+			Subcommand:  "schemas",
+			Description: "Discover schemas and refresh schema index files",
+		},
+		{
+			Name:        "tables",
+			Subcommand:  "tables",
+			Description: "Discover table columns and samples",
+		},
+	}
+
+	fmt.Println("Starting dbh sync workflow")
+	if name == "" {
+		fmt.Println("Connection: primary/default")
+	} else {
+		fmt.Printf("Connection: %s\n", name)
+	}
+	fmt.Println()
+
+	results := runSyncStages(stages, stageArgs, defaultSyncStageRunner, os.Stdout)
+	failedStages := printSyncSummary(results, os.Stdout)
+	if failedStages > 0 {
+		os.Exit(1)
+	}
+}
+
+func buildConnectionSelectionArgs(name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	return []string{"-s", name}
+}
+
+func runSyncStages(
+	stages []syncStage,
+	args []string,
+	runner syncStageRunner,
+	out io.Writer,
+) []syncStageResult {
+	results := make([]syncStageResult, 0, len(stages))
+	totalStages := len(stages)
+
+	for idx, stage := range stages {
+		fmt.Fprintf(out, "[%d/%d] %s: %s\n", idx+1, totalStages, stage.Name, stage.Description)
+		startedAt := time.Now()
+		err := runner(stage.Subcommand, args)
+		duration := time.Since(startedAt).Round(time.Millisecond)
+
+		if err != nil {
+			fmt.Fprintf(out, "[%d/%d] %s failed after %s: %v\n\n", idx+1, totalStages, stage.Name, duration, err)
+		} else {
+			fmt.Fprintf(out, "[%d/%d] %s completed in %s\n\n", idx+1, totalStages, stage.Name, duration)
+		}
+
+		results = append(results, syncStageResult{
+			StageName: stage.Name,
+			Duration:  duration,
+			Err:       err,
+		})
+	}
+
+	return results
+}
+
+func printSyncSummary(results []syncStageResult, out io.Writer) int {
+	failedStages := 0
+	fmt.Fprintln(out, "Sync summary:")
+	for _, result := range results {
+		status := "ok"
+		if result.Err != nil {
+			status = "failed"
+			failedStages++
+		}
+		fmt.Fprintf(out, "  - %s: %s (%s)\n", result.StageName, status, result.Duration)
+	}
+
+	if failedStages == 0 {
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Sync completed successfully.")
+		return 0
+	}
+
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "Sync finished with %d failed stage(s). Review errors above.\n", failedStages)
+	return failedStages
+}
+
+func runSelfSubcommand(subcommand string, args []string) error {
+	executablePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve executable path: %w", err)
+	}
+
+	commandArgs := append([]string{subcommand}, args...)
+	cmd := exec.Command(executablePath, commandArgs...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run %s: %w", subcommand, err)
+	}
+
+	return nil
 }
 
 func runInit(args []string) {

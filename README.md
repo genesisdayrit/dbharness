@@ -80,6 +80,27 @@ This creates a nested directory structure:
 
 The YAML files are designed for AI coding agents (Claude Code, Cursor, etc.) to discover and explore database structures. Re-running the command refreshes the files with the latest schema data.
 
+### `dbh sync`
+
+Runs the full discovery workflow in one command:
+
+```bash
+# Use the primary connection
+dbh sync
+
+# Use a specific connection
+dbh sync -s my-db
+```
+
+`dbh sync` executes these commands in order:
+
+1. `dbh databases` (alias of `dbh update-databases`)
+2. `dbh schemas`
+3. `dbh tables`
+
+Each stage prints progress and status. If a stage fails, dbh continues to the
+next stage and prints a summary at the end.
+
 ### `dbh tables`
 
 Runs an interactive workflow to generate per-table detail files (`__columns.yml` + `__sample.xml`).
