@@ -94,7 +94,7 @@ dbh sync -s my-db
 
 `dbh sync` executes these commands in order:
 
-1. `dbh databases` (alias of `dbh update-databases`)
+1. `dbh databases`
 2. `dbh schemas`
 3. `dbh tables`
 

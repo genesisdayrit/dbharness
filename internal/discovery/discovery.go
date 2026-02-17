@@ -152,7 +152,7 @@ func NewDatabaseLister(cfg DatabaseConfig) (DatabaseLister, error) {
 	case "mysql":
 		return newMySQLDatabaseLister(cfg)
 	default:
-		return nil, fmt.Errorf("update-databases is not supported for connection type %q", cfg.Type)
+		return nil, fmt.Errorf("databases discovery is not supported for connection type %q", cfg.Type)
 	}
 }
 

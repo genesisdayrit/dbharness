@@ -1,6 +1,6 @@
 # Databases
 
-`dbh databases` (alias: `dbh update-databases`) discovers databases for a configured connection and
+`dbh databases` discovers databases for a configured connection and
 updates `.dbharness/context/connections/<connection-name>/databases/_databases.yml`.
 
 It is useful when you want to refresh the database list without generating full

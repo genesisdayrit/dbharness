@@ -56,9 +56,7 @@ func main() {
 	case "columns":
 		runColumns(os.Args[2:])
 	case "databases":
-		runUpdateDatabases(os.Args[2:])
-	case "update-databases":
-		runUpdateDatabases(os.Args[2:])
+		runDatabases(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -79,7 +77,6 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh tables [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh columns [-s name]")
-	fmt.Fprintln(os.Stderr, "  dbh update-databases [-s name]")
 }
 
 type syncStage struct {
@@ -500,7 +497,7 @@ func runSetDefaultDatabase() {
 			absDatabasesPath, _ := filepath.Abs(databasesPath)
 			fmt.Fprintf(
 				os.Stderr,
-				"could not read %s: run \"dbh update-databases -s %s\" first to create it\n",
+				"could not read %s: run \"dbh databases -s %s\" first to create it\n",
 				absDatabasesPath,
 				primary.Name,
 			)
@@ -1580,8 +1577,8 @@ func ensureDefaultDatabaseForSchemas(cfg *config, dbCfg *databaseConfig, configP
 	return nil
 }
 
-func runUpdateDatabases(args []string) {
-	flags := flag.NewFlagSet("update-databases", flag.ExitOnError)
+func runDatabases(args []string) {
+	flags := flag.NewFlagSet("databases", flag.ExitOnError)
 	shortName := flags.String("s", "", "Connection name from config.json.")
 	longName := flags.String("name", "", "Connection name from config.json.")
 	_ = flags.Parse(args)
