@@ -126,5 +126,3 @@ The prompt shows the current default database (if one exists), includes an optio
 
 - `.dbharness/config.json` (connection `database` field)
 - `.dbharness/context/connections/<primary-connection>/databases/_databases.yml` (`default_database`)
-
-If `_databases.yml` is missing, the command falls back to a live database query for that connection, lets you choose from the discovered databases, and creates `_databases.yml` as part of the same flow.

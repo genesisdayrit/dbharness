@@ -332,34 +332,20 @@ func runSetDefaultDatabase() {
 	}
 
 	databasesPath := filepath.Join(baseDir, "context", "connections", primary.Name, "databases", "_databases.yml")
-	databasesFileMissing := false
 	catalog, err := readDatabasesCatalog(databasesPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			databasesFileMissing = true
-			fmt.Printf(
-				"No databases catalog found for connection %q. Discovering databases from the live connection...\n",
+			absDatabasesPath, _ := filepath.Abs(databasesPath)
+			fmt.Fprintf(
+				os.Stderr,
+				"could not read %s: run \"dbh update-databases -s %s\" first to create it\n",
+				absDatabasesPath,
 				primary.Name,
 			)
-			if primary.Type == "snowflake" && primary.Authenticator == "externalbrowser" {
-				fmt.Println("Opening browser for SSO authentication...")
-			}
-
-			liveDatabases, err := listDatabasesFromLiveConnection(primary)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "discover databases: %v\n", err)
-				os.Exit(1)
-			}
-
-			catalog = databasesCatalog{
-				DatabaseType: primary.Type,
-				Databases:    liveDatabases,
-			}
-		}
-		if !databasesFileMissing {
-			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	if len(catalog.Databases) == 0 {
@@ -381,16 +367,8 @@ func runSetDefaultDatabase() {
 	}
 
 	if selected == keepCurrentDefaultSelectionValue {
-		if !databasesFileMissing {
-			fmt.Println("Keeping existing default database.")
-			return
-		}
-		if strings.TrimSpace(currentDefault) == "" {
-			fmt.Fprintln(os.Stderr, "no current default database is available to keep")
-			os.Exit(1)
-		}
-		selected = currentDefault
 		fmt.Println("Keeping existing default database.")
+		return
 	}
 
 	selected = strings.TrimSpace(selected)
@@ -400,7 +378,7 @@ func runSetDefaultDatabase() {
 	}
 
 	configNeedsUpdate := strings.TrimSpace(primary.Database) != selected
-	databasesNeedsUpdate := databasesFileMissing || strings.TrimSpace(catalog.DefaultDatabase) != selected
+	databasesNeedsUpdate := strings.TrimSpace(catalog.DefaultDatabase) != selected
 
 	if configNeedsUpdate {
 		updated, err := setConnectionDefaultDatabase(&cfg, primary.Name, selected)
@@ -440,48 +418,6 @@ func runSetDefaultDatabase() {
 	if databasesNeedsUpdate {
 		fmt.Printf("Updated default database to %q in %s\n", selected, absDatabasesPath)
 	}
-}
-
-func listDatabasesFromLiveConnection(dbCfg databaseConfig) ([]string, error) {
-	listerCfg := discovery.DatabaseConfig{
-		Type:          dbCfg.Type,
-		Database:      dbCfg.Database,
-		Host:          dbCfg.Host,
-		Port:          dbCfg.Port,
-		User:          dbCfg.User,
-		Password:      dbCfg.Password,
-		SSLMode:       dbCfg.SSLMode,
-		Account:       dbCfg.Account,
-		Role:          dbCfg.Role,
-		Warehouse:     dbCfg.Warehouse,
-		Authenticator: dbCfg.Authenticator,
-	}
-
-	lister, err := discovery.NewDatabaseLister(listerCfg)
-	if err != nil {
-		return nil, fmt.Errorf("connect: %w", err)
-	}
-	defer lister.Close()
-
-	timeout := 60 * time.Second
-	if dbCfg.Authenticator == "externalbrowser" {
-		timeout = 120 * time.Second
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	databases, err := lister.ListDatabases(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list databases: %w", err)
-	}
-
-	databases = normalizeDatabaseNames(databases)
-	if len(databases) == 0 {
-		return nil, fmt.Errorf("no databases discovered for connection %q", dbCfg.Name)
-	}
-
-	return databases, nil
 }
 
 func resolveCurrentDefaultDatabase(configDefault, fileDefault string) string {
