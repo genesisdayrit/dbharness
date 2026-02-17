@@ -558,17 +558,33 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 		BaseDir:        baseDir,
 	}
 
-	totalTables := 0
+	// Count total tables across selected schemas for progress display
+	totalTableCount := 0
+	for _, schema := range schemas {
+		if selectedSet[schema.Name] {
+			totalTableCount += len(schema.Tables)
+		}
+	}
+
+	if totalTableCount == 0 {
+		fmt.Println("No tables to process.")
+		return
+	}
+
+	tableIndex := 0
 
 	for _, schema := range schemas {
 		if !selectedSet[schema.Name] {
 			continue
 		}
 
-		fmt.Printf("Processing schema %q (%d tables)...\n", schema.Name, len(schema.Tables))
+		fmt.Printf("\nProcessing schema %q (%d tables)...\n", schema.Name, len(schema.Tables))
 
 		for _, table := range schema.Tables {
-			totalTables++
+			tableIndex++
+			tableStart := time.Now()
+
+			fmt.Printf("  [%d/%d] Processing %s.%s...\n", tableIndex, totalTableCount, schema.Name, table.Name)
 
 			input := contextgen.TableDetailInput{
 				Schema: schema.Name,
@@ -578,7 +594,7 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 			// Get columns
 			cols, err := disc.GetColumns(ctx, schema.Name, table.Name)
 			if err != nil {
-				fmt.Printf("  Skipping columns for %s.%s: %v\n", schema.Name, table.Name, err)
+				fmt.Printf("    Skipping columns for %s.%s: %v\n", schema.Name, table.Name, err)
 			} else {
 				input.Columns = cols
 			}
@@ -586,26 +602,29 @@ func processDatabase(dbCfg databaseConfig, baseDir, database string) {
 			// Get sample rows
 			sample, err := disc.GetSampleRows(ctx, schema.Name, table.Name, 10)
 			if err != nil {
-				fmt.Printf("  Skipping sample for %s.%s: %v\n", schema.Name, table.Name, err)
+				fmt.Printf("    Skipping sample for %s.%s: %v\n", schema.Name, table.Name, err)
 			} else {
 				input.Sample = sample
 			}
 
 			// Write files for this table immediately
 			if err := contextgen.GenerateTableDetails([]contextgen.TableDetailInput{input}, opts); err != nil {
-				fmt.Printf("  Error generating files for %s.%s: %v\n", schema.Name, table.Name, err)
+				fmt.Printf("    Error generating files for %s.%s: %v\n", schema.Name, table.Name, err)
 				continue
 			}
-			fmt.Printf("  Wrote %s.%s\n", schema.Name, table.Name)
+
+			elapsed := time.Since(tableStart).Round(time.Millisecond)
+			if input.Columns != nil {
+				fmt.Printf("    Wrote columns file for %s.%s\n", schema.Name, table.Name)
+			}
+			if input.Sample != nil && len(input.Sample.Rows) > 0 {
+				fmt.Printf("    Wrote sample file for %s.%s\n", schema.Name, table.Name)
+			}
+			fmt.Printf("    Done %s.%s (%s)\n", schema.Name, table.Name, elapsed)
 		}
 	}
 
-	if totalTables == 0 {
-		fmt.Println("No tables to process.")
-		return
-	}
-
-	fmt.Printf("\nProcessed %d table(s) across %d schema(s)\n", totalTables, len(selectedSchemas))
+	fmt.Printf("\nProcessed %d table(s) across %d schema(s)\n", tableIndex, len(selectedSchemas))
 }
 
 // promptMultiSelectWithAll shows a multi-select prompt with a "Select all" option.
