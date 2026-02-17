@@ -115,12 +115,12 @@ brew install goreleaser
 Once you're confident everything works:
 
 1. Merge your PR to `main`
-2. Tag and push:
+2. Create an annotated semantic version tag and push it:
 
 ```bash
 git checkout main
 git pull origin main
-git tag v0.x.x
+git tag -a v0.x.x -m "v0.x.x: short release summary"
 git push origin v0.x.x
 ```
 
@@ -129,9 +129,37 @@ git push origin v0.x.x
    - Creates a GitHub Release with the archives
    - Publishes the updated Homebrew formula to `genesisdayrit/tap`
 
-4. Users receive the update via:
+4. Add or update release notes (recommended):
 
 ```bash
+# auto-generated notes
+gh release create v0.x.x --generate-notes
+
+# or provide custom notes
+gh release create v0.x.x --title "v0.x.x" --notes-file RELEASE_NOTES.md
+```
+
+If the release already exists (for example, created by GoReleaser), edit it:
+
+```bash
+gh release edit v0.x.x --title "v0.x.x" --notes-file RELEASE_NOTES.md
+```
+
+5. Verify the release pipeline and Homebrew formula update:
+
+```bash
+# Check workflow status
+gh run list --workflow release.yml --limit 1
+gh run view <run-id> --json status,conclusion,url
+
+# Check Homebrew tap formula version
+gh api repos/genesisdayrit/tap/contents/dbh.rb --jq .content | tr -d '\n' | base64 --decode
+```
+
+6. Users receive the update via:
+
+```bash
+brew update
 brew upgrade dbh
 ```
 
