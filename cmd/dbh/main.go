@@ -643,6 +643,7 @@ func promptMultiSelectWithAll(label string, options []string) ([]string, error) 
 	var selected []string
 	if err := huh.NewMultiSelect[string]().
 		Title(label).
+		Description("Press <space> to toggle, <enter> to confirm").
 		Options(opts...).
 		Value(&selected).
 		Run(); err != nil {
