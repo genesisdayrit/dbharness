@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	gcpbigquery "cloud.google.com/go/bigquery"
 	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
@@ -182,5 +183,84 @@ func TestBuildMySQLDSN_DefaultPortAndParseTime(t *testing.T) {
 	}
 	if parsed.TLSConfig != "true" {
 		t.Fatalf("dsn tls = %q, want %q", parsed.TLSConfig, "true")
+	}
+}
+
+func TestQuoteBigQueryIdentifier(t *testing.T) {
+	got := quoteBigQueryIdentifier("project.dataset.table")
+	if got != "`project.dataset.table`" {
+		t.Fatalf("quoteBigQueryIdentifier(simple) = %q, want %q", got, "`project.dataset.table`")
+	}
+
+	got = quoteBigQueryIdentifier("col`name")
+	if got != "`col``name`" {
+		t.Fatalf("quoteBigQueryIdentifier(escaped) = %q, want %q", got, "`col``name`")
+	}
+}
+
+func TestBigQueryFieldDataType(t *testing.T) {
+	stringField := &gcpbigquery.FieldSchema{
+		Name: "customer_id",
+		Type: gcpbigquery.StringFieldType,
+	}
+	if got := bigQueryFieldDataType(stringField); got != "STRING" {
+		t.Fatalf("bigQueryFieldDataType(string) = %q, want %q", got, "STRING")
+	}
+
+	repeatedString := &gcpbigquery.FieldSchema{
+		Name:     "tags",
+		Type:     gcpbigquery.StringFieldType,
+		Repeated: true,
+	}
+	if got := bigQueryFieldDataType(repeatedString); got != "ARRAY<STRING>" {
+		t.Fatalf("bigQueryFieldDataType(repeated string) = %q, want %q", got, "ARRAY<STRING>")
+	}
+
+	structField := &gcpbigquery.FieldSchema{
+		Name: "address",
+		Type: gcpbigquery.RecordFieldType,
+		Schema: gcpbigquery.Schema{
+			&gcpbigquery.FieldSchema{Name: "city", Type: gcpbigquery.StringFieldType},
+			&gcpbigquery.FieldSchema{Name: "zip", Type: gcpbigquery.IntegerFieldType},
+		},
+	}
+	if got := bigQueryFieldDataType(structField); got != "STRUCT<city STRING, zip INTEGER>" {
+		t.Fatalf("bigQueryFieldDataType(struct) = %q, want %q", got, "STRUCT<city STRING, zip INTEGER>")
+	}
+}
+
+func TestNormalizeBigQueryTableType(t *testing.T) {
+	tests := []struct {
+		name      string
+		tableType gcpbigquery.TableType
+		want      string
+	}{
+		{name: "regular table", tableType: gcpbigquery.RegularTable, want: "BASE TABLE"},
+		{name: "view", tableType: gcpbigquery.ViewTable, want: "VIEW"},
+		{name: "materialized view", tableType: gcpbigquery.MaterializedView, want: "MATERIALIZED VIEW"},
+		{name: "external", tableType: gcpbigquery.ExternalTable, want: "EXTERNAL TABLE"},
+		{name: "snapshot", tableType: gcpbigquery.Snapshot, want: "SNAPSHOT"},
+		{name: "fallback normalization", tableType: gcpbigquery.TableType("native_table"), want: "NATIVE TABLE"},
+		{name: "empty fallback", tableType: "", want: "BASE TABLE"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeBigQueryTableType(tt.tableType); got != tt.want {
+				t.Fatalf("normalizeBigQueryTableType(%q) = %q, want %q", tt.tableType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsBigQuerySystemSchema(t *testing.T) {
+	if !isBigQuerySystemSchema("INFORMATION_SCHEMA") {
+		t.Fatalf("INFORMATION_SCHEMA should be treated as a system schema")
+	}
+	if !isBigQuerySystemSchema("_session") {
+		t.Fatalf("_session should be treated as a system schema")
+	}
+	if isBigQuerySystemSchema("analytics") {
+		t.Fatalf("analytics should not be treated as a system schema")
 	}
 }

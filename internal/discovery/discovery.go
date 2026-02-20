@@ -1,5 +1,5 @@
 // Package discovery provides database schema and table introspection
-// for supported database types (Postgres, Snowflake, MySQL).
+// for supported database types (Postgres, Snowflake, MySQL, BigQuery).
 package discovery
 
 import (
@@ -109,6 +109,10 @@ type DatabaseConfig struct {
 	Warehouse     string
 	Schema        string
 	Authenticator string
+
+	// BigQuery
+	ProjectID       string
+	CredentialsFile string
 }
 
 // New creates a Discoverer for the given database configuration.
@@ -120,6 +124,8 @@ func New(cfg DatabaseConfig) (Discoverer, error) {
 		return newSnowflake(cfg)
 	case "mysql":
 		return newMySQL(cfg)
+	case "bigquery":
+		return newBigQuery(cfg)
 	default:
 		return nil, fmt.Errorf("unsupported database type %q", cfg.Type)
 	}
@@ -136,6 +142,8 @@ func NewTableDetailDiscoverer(cfg DatabaseConfig) (TableDetailDiscoverer, error)
 		return newSnowflake(cfg)
 	case "mysql":
 		return newMySQL(cfg)
+	case "bigquery":
+		return newBigQuery(cfg)
 	default:
 		return nil, fmt.Errorf("unsupported database type %q for table detail discovery", cfg.Type)
 	}
@@ -151,6 +159,8 @@ func NewDatabaseLister(cfg DatabaseConfig) (DatabaseLister, error) {
 		return newSnowflakeDatabaseLister(cfg)
 	case "mysql":
 		return newMySQLDatabaseLister(cfg)
+	case "bigquery":
+		return newBigQueryDatabaseLister(cfg)
 	default:
 		return nil, fmt.Errorf("databases discovery is not supported for connection type %q", cfg.Type)
 	}

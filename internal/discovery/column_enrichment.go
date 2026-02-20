@@ -119,3 +119,7 @@ func quoteSnowflakeIdentifier(identifier string) string {
 func quoteMySQLIdentifier(identifier string) string {
 	return "`" + strings.ReplaceAll(identifier, "`", "``") + "`"
 }
+
+func quoteBigQueryIdentifier(identifier string) string {
+	return "`" + strings.ReplaceAll(identifier, "`", "``") + "`"
+}

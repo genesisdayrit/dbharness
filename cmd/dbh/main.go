@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	gcpbigquery "cloud.google.com/go/bigquery"
 	"github.com/charmbracelet/huh"
 	"github.com/genesisdayrit/dbharness/internal/contextgen"
 	"github.com/genesisdayrit/dbharness/internal/discovery"
@@ -27,6 +28,8 @@ import (
 	mysqlDriver "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	"github.com/snowflakedb/gosnowflake"
+	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 	"gopkg.in/yaml.v3"
 )
 
@@ -288,7 +291,11 @@ type databaseConfig struct {
 	Account       string `json:"account,omitempty"`
 	Role          string `json:"role,omitempty"`
 	Warehouse     string `json:"warehouse,omitempty"`
-	Authenticator string `json:"authenticator,omitempty"}`
+	Authenticator string `json:"authenticator,omitempty"`
+
+	// BigQuery-specific
+	ProjectID       string `json:"project_id,omitempty"`
+	CredentialsFile string `json:"credentials_file,omitempty"`
 }
 
 func runTestConnection(args []string) {
@@ -704,19 +711,21 @@ func runSchemas(args []string) {
 	}
 
 	discoveryCfg := discovery.DatabaseConfig{
-		Type:          dbCfg.Type,
-		Database:      dbCfg.Database,
-		Host:          dbCfg.Host,
-		Port:          dbCfg.Port,
-		User:          dbCfg.User,
-		Password:      dbCfg.Password,
-		SSLMode:       dbCfg.SSLMode,
-		TLS:           dbCfg.TLS,
-		Account:       dbCfg.Account,
-		Role:          dbCfg.Role,
-		Warehouse:     dbCfg.Warehouse,
-		Schema:        dbCfg.Schema,
-		Authenticator: dbCfg.Authenticator,
+		Type:            dbCfg.Type,
+		Database:        dbCfg.Database,
+		Host:            dbCfg.Host,
+		Port:            dbCfg.Port,
+		User:            dbCfg.User,
+		Password:        dbCfg.Password,
+		SSLMode:         dbCfg.SSLMode,
+		TLS:             dbCfg.TLS,
+		Account:         dbCfg.Account,
+		Role:            dbCfg.Role,
+		Warehouse:       dbCfg.Warehouse,
+		Schema:          dbCfg.Schema,
+		Authenticator:   dbCfg.Authenticator,
+		ProjectID:       dbCfg.ProjectID,
+		CredentialsFile: dbCfg.CredentialsFile,
 	}
 
 	disc, err := discovery.New(discoveryCfg)
@@ -1213,18 +1222,20 @@ func selectDatabasesForTables(cfg *config, dbCfg *databaseConfig, configPath str
 	}
 
 	listerCfg := discovery.DatabaseConfig{
-		Type:          dbCfg.Type,
-		Database:      dbCfg.Database,
-		Host:          dbCfg.Host,
-		Port:          dbCfg.Port,
-		User:          dbCfg.User,
-		Password:      dbCfg.Password,
-		SSLMode:       dbCfg.SSLMode,
-		TLS:           dbCfg.TLS,
-		Account:       dbCfg.Account,
-		Role:          dbCfg.Role,
-		Warehouse:     dbCfg.Warehouse,
-		Authenticator: dbCfg.Authenticator,
+		Type:            dbCfg.Type,
+		Database:        dbCfg.Database,
+		Host:            dbCfg.Host,
+		Port:            dbCfg.Port,
+		User:            dbCfg.User,
+		Password:        dbCfg.Password,
+		SSLMode:         dbCfg.SSLMode,
+		TLS:             dbCfg.TLS,
+		Account:         dbCfg.Account,
+		Role:            dbCfg.Role,
+		Warehouse:       dbCfg.Warehouse,
+		Authenticator:   dbCfg.Authenticator,
+		ProjectID:       dbCfg.ProjectID,
+		CredentialsFile: dbCfg.CredentialsFile,
 	}
 
 	lister, err := discovery.NewDatabaseLister(listerCfg)
@@ -1488,19 +1499,21 @@ func promptMultiSelectWithAll(label string, options []string) ([]string, error) 
 // toDiscoveryConfig converts a databaseConfig to a discovery.DatabaseConfig.
 func toDiscoveryConfig(dbCfg databaseConfig) discovery.DatabaseConfig {
 	return discovery.DatabaseConfig{
-		Type:          dbCfg.Type,
-		Database:      dbCfg.Database,
-		Host:          dbCfg.Host,
-		Port:          dbCfg.Port,
-		User:          dbCfg.User,
-		Password:      dbCfg.Password,
-		SSLMode:       dbCfg.SSLMode,
-		TLS:           dbCfg.TLS,
-		Account:       dbCfg.Account,
-		Role:          dbCfg.Role,
-		Warehouse:     dbCfg.Warehouse,
-		Schema:        dbCfg.Schema,
-		Authenticator: dbCfg.Authenticator,
+		Type:            dbCfg.Type,
+		Database:        dbCfg.Database,
+		Host:            dbCfg.Host,
+		Port:            dbCfg.Port,
+		User:            dbCfg.User,
+		Password:        dbCfg.Password,
+		SSLMode:         dbCfg.SSLMode,
+		TLS:             dbCfg.TLS,
+		Account:         dbCfg.Account,
+		Role:            dbCfg.Role,
+		Warehouse:       dbCfg.Warehouse,
+		Schema:          dbCfg.Schema,
+		Authenticator:   dbCfg.Authenticator,
+		ProjectID:       dbCfg.ProjectID,
+		CredentialsFile: dbCfg.CredentialsFile,
 	}
 }
 
@@ -1518,18 +1531,20 @@ func ensureDefaultDatabaseForSchemas(cfg *config, dbCfg *databaseConfig, configP
 	}
 
 	listerCfg := discovery.DatabaseConfig{
-		Type:          dbCfg.Type,
-		Database:      dbCfg.Database,
-		Host:          dbCfg.Host,
-		Port:          dbCfg.Port,
-		User:          dbCfg.User,
-		Password:      dbCfg.Password,
-		SSLMode:       dbCfg.SSLMode,
-		TLS:           dbCfg.TLS,
-		Account:       dbCfg.Account,
-		Role:          dbCfg.Role,
-		Warehouse:     dbCfg.Warehouse,
-		Authenticator: dbCfg.Authenticator,
+		Type:            dbCfg.Type,
+		Database:        dbCfg.Database,
+		Host:            dbCfg.Host,
+		Port:            dbCfg.Port,
+		User:            dbCfg.User,
+		Password:        dbCfg.Password,
+		SSLMode:         dbCfg.SSLMode,
+		TLS:             dbCfg.TLS,
+		Account:         dbCfg.Account,
+		Role:            dbCfg.Role,
+		Warehouse:       dbCfg.Warehouse,
+		Authenticator:   dbCfg.Authenticator,
+		ProjectID:       dbCfg.ProjectID,
+		CredentialsFile: dbCfg.CredentialsFile,
 	}
 
 	lister, err := discovery.NewDatabaseLister(listerCfg)
@@ -1617,18 +1632,20 @@ func runDatabases(args []string) {
 	}
 
 	discoveryCfg := discovery.DatabaseConfig{
-		Type:          dbCfg.Type,
-		Host:          dbCfg.Host,
-		Port:          dbCfg.Port,
-		Database:      dbCfg.Database,
-		User:          dbCfg.User,
-		Password:      dbCfg.Password,
-		SSLMode:       dbCfg.SSLMode,
-		TLS:           dbCfg.TLS,
-		Account:       dbCfg.Account,
-		Role:          dbCfg.Role,
-		Warehouse:     dbCfg.Warehouse,
-		Authenticator: dbCfg.Authenticator,
+		Type:            dbCfg.Type,
+		Host:            dbCfg.Host,
+		Port:            dbCfg.Port,
+		Database:        dbCfg.Database,
+		User:            dbCfg.User,
+		Password:        dbCfg.Password,
+		SSLMode:         dbCfg.SSLMode,
+		TLS:             dbCfg.TLS,
+		Account:         dbCfg.Account,
+		Role:            dbCfg.Role,
+		Warehouse:       dbCfg.Warehouse,
+		Authenticator:   dbCfg.Authenticator,
+		ProjectID:       dbCfg.ProjectID,
+		CredentialsFile: dbCfg.CredentialsFile,
 	}
 
 	lister, err := discovery.NewDatabaseLister(discoveryCfg)
@@ -1759,6 +1776,21 @@ func connectionHostURL(entry databaseConfig) string {
 		return fmt.Sprintf("https://%s.snowflakecomputing.com", account)
 	}
 
+	if strings.EqualFold(strings.TrimSpace(entry.Type), "bigquery") {
+		projectID := strings.TrimSpace(entry.ProjectID)
+		if projectID == "" {
+			projectID = strings.TrimSpace(entry.Database)
+		}
+		if projectID == "" {
+			return ""
+		}
+		dataset := strings.TrimSpace(entry.Schema)
+		if dataset == "" {
+			dataset = "_default"
+		}
+		return fmt.Sprintf("bigquery://%s/%s", projectID, dataset)
+	}
+
 	return ""
 }
 
@@ -1784,7 +1816,7 @@ func sanitizeSchemaName(name string) string {
 
 func requiresExplicitDatabaseSelection(databaseType string) bool {
 	switch strings.ToLower(strings.TrimSpace(databaseType)) {
-	case "postgres", "snowflake", "mysql":
+	case "postgres", "snowflake", "mysql", "bigquery":
 		return true
 	default:
 		return false
@@ -1920,6 +1952,8 @@ func pingDatabase(entry databaseConfig) error {
 		return pingSnowflake(entry)
 	case "mysql":
 		return pingMySQL(entry)
+	case "bigquery":
+		return pingBigQuery(entry)
 	default:
 		return fmt.Errorf("unsupported database type %q", entry.Type)
 	}
@@ -2026,6 +2060,37 @@ func pingMySQL(entry databaseConfig) error {
 
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping mysql: %w", err)
+	}
+
+	return nil
+}
+
+func pingBigQuery(entry databaseConfig) error {
+	projectID := strings.TrimSpace(entry.ProjectID)
+	if projectID == "" {
+		projectID = strings.TrimSpace(entry.Database)
+	}
+	if projectID == "" {
+		return fmt.Errorf("bigquery project_id is required")
+	}
+
+	clientOptions := make([]option.ClientOption, 0, 1)
+	if credentialsFile := strings.TrimSpace(entry.CredentialsFile); credentialsFile != "" {
+		clientOptions = append(clientOptions, option.WithCredentialsFile(credentialsFile))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := gcpbigquery.NewClient(ctx, projectID, clientOptions...)
+	if err != nil {
+		return fmt.Errorf("open bigquery client: %w", err)
+	}
+	defer client.Close()
+
+	datasetIterator := client.Datasets(ctx)
+	if _, err := datasetIterator.Next(); err != nil && !errors.Is(err, iterator.Done) {
+		return fmt.Errorf("list bigquery datasets: %w", err)
 	}
 
 	return nil
@@ -2248,6 +2313,15 @@ func collectMySQLConfig(entry *databaseConfig) {
 	entry.TLS = promptSelect("TLS Mode", []string{"true", "preferred", "skip-verify", "false"})
 }
 
+func collectBigQueryConfig(entry *databaseConfig) {
+	entry.ProjectID = promptStringRequired("Project ID")
+	entry.Database = entry.ProjectID
+	fmt.Print("Default dataset (optional, press Enter to skip): ")
+	entry.Schema = readLine()
+	fmt.Print("Service account JSON file path (optional, press Enter for Application Default Credentials): ")
+	entry.CredentialsFile = readLine()
+}
+
 func addConnectionEntry(targetDir string, firstInit bool) {
 	configPath := filepath.Join(targetDir, "config.json")
 	cfg, err := readConfig(configPath)
@@ -2265,7 +2339,7 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		fmt.Printf("  %q already exists, choose another.\n", name)
 	}
 
-	dbType := promptSelect("Database type", []string{"postgres", "snowflake", "mysql"})
+	dbType := promptSelect("Database type", []string{"postgres", "snowflake", "mysql", "bigquery"})
 	environment := promptSelect("Environment", []string{
 		"production", "staging", "development", "local", "testing", "(skip for now)",
 	})
@@ -2286,6 +2360,8 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		collectSnowflakeConfig(&entry)
 	case "mysql":
 		collectMySQLConfig(&entry)
+	case "bigquery":
+		collectBigQueryConfig(&entry)
 	}
 
 	primary := firstInit
