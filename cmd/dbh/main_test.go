@@ -190,6 +190,23 @@ func TestConnectionHostURL(t *testing.T) {
 			},
 			want: "",
 		},
+		{
+			name: "bigquery connection uri",
+			entry: databaseConfig{
+				Type:      "bigquery",
+				ProjectID: "my-project",
+				Schema:    "analytics",
+			},
+			want: "bigquery://my-project/analytics",
+		},
+		{
+			name: "bigquery falls back to database field and default dataset marker",
+			entry: databaseConfig{
+				Type:     "bigquery",
+				Database: "fallback-project",
+			},
+			want: "bigquery://fallback-project/_default",
+		},
 	}
 
 	for _, tt := range tests {
@@ -197,6 +214,28 @@ func TestConnectionHostURL(t *testing.T) {
 			got := connectionHostURL(tt.entry)
 			if got != tt.want {
 				t.Fatalf("connectionHostURL(...) = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequiresExplicitDatabaseSelection(t *testing.T) {
+	tests := []struct {
+		name         string
+		databaseType string
+		want         bool
+	}{
+		{name: "postgres", databaseType: "postgres", want: true},
+		{name: "snowflake", databaseType: "snowflake", want: true},
+		{name: "mysql", databaseType: "mysql", want: true},
+		{name: "bigquery", databaseType: "bigquery", want: true},
+		{name: "sqlite", databaseType: "sqlite", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := requiresExplicitDatabaseSelection(tt.databaseType); got != tt.want {
+				t.Fatalf("requiresExplicitDatabaseSelection(%q) = %v, want %v", tt.databaseType, got, tt.want)
 			}
 		})
 	}
