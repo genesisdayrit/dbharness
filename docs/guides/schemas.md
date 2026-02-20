@@ -126,18 +126,40 @@ Queries `information_schema.schemata` and `information_schema.tables`. System sc
 - `pg_toast`
 - `pg_temp_*`
 
+### Redshift
+
+Queries `information_schema.schemata` and `information_schema.tables` over the
+PostgreSQL-compatible protocol. System schemas are excluded by default:
+
+- `information_schema`
+- `pg_catalog`
+- `pg_internal`
+- `pg_temp_*`
+
 ### Snowflake
 
 Queries `INFORMATION_SCHEMA.SCHEMATA` and `INFORMATION_SCHEMA.TABLES`. The `INFORMATION_SCHEMA` schema itself is excluded.
+
+### MySQL
+
+Queries `information_schema.schemata` and `information_schema.tables`. System
+schemas are excluded (`information_schema`, `mysql`, `performance_schema`,
+`sys`).
+
+### BigQuery
+
+Treats datasets as schema equivalents and discovers them from the configured
+project (stored in `project_id` / `database`).
 
 ## Re-generating
 
 Running `dbh schemas` again overwrites the existing context files with fresh data. This is useful after schema changes (new tables, dropped schemas, etc.).
 
-## Default database behavior (Postgres/Snowflake)
+## Default database behavior
 
-For `postgres` and `snowflake`, `dbh schemas` generates context for only one
-database: the connection's configured default database.
+For `postgres`, `redshift`, `snowflake`, `mysql`, and `bigquery`, `dbh schemas`
+generates context for only one configured default database (or project for
+BigQuery).
 
 Behavior:
 

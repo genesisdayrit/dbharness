@@ -131,11 +131,29 @@ The command uses the same connection resolution as other commands:
 - Sample: `SELECT * FROM "schema"."table" ORDER BY RANDOM() LIMIT 10`
 - System schemas (`pg_catalog`, `information_schema`, etc.) are excluded
 
+### Redshift
+
+- Columns: Queries `information_schema.columns`
+- Sample: `SELECT * FROM "schema"."table" ORDER BY RANDOM() LIMIT 10`
+- System schemas (`information_schema`, `pg_catalog`, `pg_internal`, `pg_temp_*`) are excluded
+
 ### Snowflake
 
 - Columns: Queries `INFORMATION_SCHEMA.COLUMNS`
 - Sample: `SELECT * FROM "SCHEMA"."TABLE" ORDER BY RANDOM() LIMIT 10`
 - `INFORMATION_SCHEMA` is excluded
+
+### MySQL
+
+- Columns: Queries `information_schema.columns`
+- Sample: `SELECT * FROM \`schema\`.\`table\` ORDER BY RAND() LIMIT 10`
+- System schemas (`information_schema`, `mysql`, `performance_schema`, `sys`) are excluded
+
+### BigQuery
+
+- Columns: Uses BigQuery table metadata (`Schema` fields)
+- Sample: `SELECT * FROM \`project.dataset.table\` ORDER BY RAND() LIMIT 10`
+- System datasets (`INFORMATION_SCHEMA`, `_SESSION`, `_SCRIPT`) are excluded
 
 ## Re-generating
 

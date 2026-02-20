@@ -44,8 +44,8 @@ Database type, environment, and SSL mode use interactive arrow-key selectors.
 
 Running `dbh init` again will prompt you to add another connection to the existing config.
 
-For full connection setup details for all supported types (Postgres, Snowflake,
-MySQL, BigQuery), see [`docs/guides/connections.md`](./docs/guides/connections.md).
+For full connection setup details for all supported types (Postgres, Redshift,
+Snowflake, MySQL, BigQuery), see [`docs/guides/connections.md`](./docs/guides/connections.md).
 
 Use `--force` to overwrite an existing `.dbharness/` folder and start fresh:
 

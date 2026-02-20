@@ -50,6 +50,7 @@ func TestGenerate_RequiresDefaultDatabaseSelectionWhenMissing(t *testing.T) {
 		databaseType string
 	}{
 		{name: "postgres", databaseType: "postgres"},
+		{name: "redshift", databaseType: "redshift"},
 		{name: "snowflake", databaseType: "snowflake"},
 		{name: "mysql", databaseType: "mysql"},
 		{name: "bigquery", databaseType: "bigquery"},

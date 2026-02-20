@@ -4,6 +4,7 @@ This guide covers how to configure dbh connections end-to-end, including all
 currently supported connection types:
 
 - `postgres`
+- `redshift`
 - `snowflake`
 - `mysql`
 - `bigquery`
@@ -52,6 +53,7 @@ in JSON).
 | Type | Main required fields | Auth model |
 |------|----------------------|-----------|
 | `postgres` | `host`, `port`, `database`, `user`, `password`, `sslmode` | Username/password |
+| `redshift` | `host`, `port`, `database`, `user`, `password`, `sslmode` | Username/password (PostgreSQL protocol) |
 | `snowflake` | `account`, `user`, `role`, `warehouse` (+ optional `database`, `schema`) | External browser SSO or username/password |
 | `mysql` | `host`, `port`, `user`, `password`, optional default database/schema, `tls` | Username/password |
 | `bigquery` | `project_id`, optional default dataset (`schema`) | ADC or service account JSON file |
@@ -83,6 +85,36 @@ in JSON).
   "port": 5432,
   "password": "secret",
   "sslmode": "disable"
+}
+```
+
+---
+
+## Redshift connection setup
+
+### Prompts
+
+- Host (required)
+- Port (default `5439`)
+- Database (required)
+- User (required)
+- Password (required)
+- SSL Mode (`require`, `verify-ca`, `verify-full`, `disable`)
+
+### Example config
+
+```json
+{
+  "name": "warehouse-redshift",
+  "environment": "production",
+  "type": "redshift",
+  "primary": false,
+  "database": "analytics",
+  "user": "etl_user",
+  "host": "example-cluster.abc123.us-east-1.redshift.amazonaws.com",
+  "port": 5439,
+  "password": "secret",
+  "sslmode": "require"
 }
 ```
 

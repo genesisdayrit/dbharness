@@ -278,7 +278,7 @@ type databaseConfig struct {
 	User     string `json:"user"`
 	Schema   string `json:"schema,omitempty"`
 
-	// Postgres-specific
+	// Postgres/Redshift-specific
 	Host     string `json:"host,omitempty"`
 	Port     int    `json:"port,omitempty"`
 	Password string `json:"password,omitempty"`
@@ -1816,7 +1816,7 @@ func sanitizeSchemaName(name string) string {
 
 func requiresExplicitDatabaseSelection(databaseType string) bool {
 	switch strings.ToLower(strings.TrimSpace(databaseType)) {
-	case "postgres", "snowflake", "mysql", "bigquery":
+	case "postgres", "redshift", "snowflake", "mysql", "bigquery":
 		return true
 	default:
 		return false
@@ -1948,6 +1948,8 @@ func pingDatabase(entry databaseConfig) error {
 	switch entry.Type {
 	case "postgres":
 		return pingPostgres(entry)
+	case "redshift":
+		return pingRedshift(entry)
 	case "snowflake":
 		return pingSnowflake(entry)
 	case "mysql":
@@ -1958,6 +1960,11 @@ func pingDatabase(entry databaseConfig) error {
 		return fmt.Errorf("unsupported database type %q", entry.Type)
 	}
 }
+
+const (
+	defaultRedshiftPort    = 5439
+	defaultRedshiftSSLMode = "require"
+)
 
 func pingPostgres(entry databaseConfig) error {
 	if entry.SSLMode == "" {
@@ -1985,6 +1992,43 @@ func pingPostgres(entry databaseConfig) error {
 
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping postgres: %w", err)
+	}
+
+	return nil
+}
+
+func pingRedshift(entry databaseConfig) error {
+	if entry.Port <= 0 {
+		entry.Port = defaultRedshiftPort
+	}
+	if strings.TrimSpace(entry.Database) == "" {
+		entry.Database = "dev"
+	}
+	if strings.TrimSpace(entry.SSLMode) == "" {
+		entry.SSLMode = defaultRedshiftSSLMode
+	}
+
+	connString := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		entry.Host,
+		entry.Port,
+		entry.User,
+		entry.Password,
+		entry.Database,
+		entry.SSLMode,
+	)
+
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return fmt.Errorf("open redshift connection: %w", err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping redshift: %w", err)
 	}
 
 	return nil
@@ -2281,6 +2325,15 @@ func collectPostgresConfig(entry *databaseConfig) {
 	entry.SSLMode = promptSelect("SSL Mode", []string{"require", "disable"})
 }
 
+func collectRedshiftConfig(entry *databaseConfig) {
+	entry.Host = promptStringRequired("Host")
+	entry.Port = promptInt("Port (press Enter for 5439)", defaultRedshiftPort)
+	entry.Database = promptStringRequired("Database")
+	entry.User = promptStringRequired("User")
+	entry.Password = promptStringRequired("Password")
+	entry.SSLMode = promptSelect("SSL Mode", []string{"require", "verify-ca", "verify-full", "disable"})
+}
+
 func collectSnowflakeConfig(entry *databaseConfig) {
 	entry.Account = promptStringRequired("Account (e.g. org-account_name)")
 	auth := promptSelect("Authenticator", []string{"externalbrowser", "snowflake username & password"})
@@ -2339,7 +2392,7 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		fmt.Printf("  %q already exists, choose another.\n", name)
 	}
 
-	dbType := promptSelect("Database type", []string{"postgres", "snowflake", "mysql", "bigquery"})
+	dbType := promptSelect("Database type", []string{"postgres", "redshift", "snowflake", "mysql", "bigquery"})
 	environment := promptSelect("Environment", []string{
 		"production", "staging", "development", "local", "testing", "(skip for now)",
 	})
@@ -2356,6 +2409,8 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 	switch dbType {
 	case "postgres":
 		collectPostgresConfig(&entry)
+	case "redshift":
+		collectRedshiftConfig(&entry)
 	case "snowflake":
 		collectSnowflakeConfig(&entry)
 	case "mysql":

@@ -168,6 +168,15 @@ func TestConnectionHostURL(t *testing.T) {
 			want: "localhost",
 		},
 		{
+			name: "redshift with host and port",
+			entry: databaseConfig{
+				Type: "redshift",
+				Host: "redshift-cluster.amazonaws.com",
+				Port: 5439,
+			},
+			want: "redshift-cluster.amazonaws.com:5439",
+		},
+		{
 			name: "snowflake from account",
 			entry: databaseConfig{
 				Type:    "snowflake",
@@ -226,6 +235,7 @@ func TestRequiresExplicitDatabaseSelection(t *testing.T) {
 		want         bool
 	}{
 		{name: "postgres", databaseType: "postgres", want: true},
+		{name: "redshift", databaseType: "redshift", want: true},
 		{name: "snowflake", databaseType: "snowflake", want: true},
 		{name: "mysql", databaseType: "mysql", want: true},
 		{name: "bigquery", databaseType: "bigquery", want: true},

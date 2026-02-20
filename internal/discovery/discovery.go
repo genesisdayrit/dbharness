@@ -1,5 +1,5 @@
 // Package discovery provides database schema and table introspection
-// for supported database types (Postgres, Snowflake, MySQL, BigQuery).
+// for supported database types (Postgres, Redshift, Snowflake, MySQL, BigQuery).
 package discovery
 
 import (
@@ -120,6 +120,8 @@ func New(cfg DatabaseConfig) (Discoverer, error) {
 	switch cfg.Type {
 	case "postgres":
 		return newPostgres(cfg)
+	case "redshift":
+		return newRedshift(cfg)
 	case "snowflake":
 		return newSnowflake(cfg)
 	case "mysql":
@@ -138,6 +140,8 @@ func NewTableDetailDiscoverer(cfg DatabaseConfig) (TableDetailDiscoverer, error)
 	switch cfg.Type {
 	case "postgres":
 		return newPostgres(cfg)
+	case "redshift":
+		return newRedshift(cfg)
 	case "snowflake":
 		return newSnowflake(cfg)
 	case "mysql":
@@ -155,6 +159,8 @@ func NewDatabaseLister(cfg DatabaseConfig) (DatabaseLister, error) {
 	switch cfg.Type {
 	case "postgres":
 		return newPostgresDatabaseLister(cfg)
+	case "redshift":
+		return newRedshiftDatabaseLister(cfg)
 	case "snowflake":
 		return newSnowflakeDatabaseLister(cfg)
 	case "mysql":
