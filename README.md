@@ -2,7 +2,13 @@
 
 # dbharness (dbh)
 
-## Install
+> AI-Ready Database Contexts
+
+`dbharness` is a CLI tool that syncs your database context to LLM-ready files for use with coding agents. It gives developers and LLMs a shared, always-current schema map so they can answer data questions and generate better code without rediscovering the database from scratch.
+
+## Quick Start
+
+### 1) Install `dbh`
 
 ```bash
 brew install genesisdayrit/tap/dbh
@@ -14,7 +20,27 @@ From source:
 go install github.com/genesisdayrit/dbharness/cmd/dbh@latest
 ```
 
-## Usage
+### 2) Initialize your project
+
+Run `dbh init` in your project directory to create `.dbharness/` and configure a database connection:
+
+```bash
+dbh init
+```
+
+### 3) Sync your database context
+
+Generate the initial AI-friendly context files with:
+
+```bash
+dbh sync
+```
+
+This runs the full discovery flow and writes schema context under `.dbharness/context/`.
+
+---
+
+## Command Reference
 
 ### `dbh init`
 
@@ -192,3 +218,16 @@ The prompt shows the current default database (if one exists), includes an optio
 
 - `.dbharness/config.json` (connection `database` field)
 - `.dbharness/context/connections/<primary-connection>/databases/_databases.yml` (`default_database`)
+
+## Guides
+
+For deeper walkthroughs and architecture details, see:
+
+- [`docs/guides/init.md`](./docs/guides/init.md)
+- [`docs/guides/connections.md`](./docs/guides/connections.md)
+- [`docs/guides/databases.md`](./docs/guides/databases.md)
+- [`docs/guides/schemas.md`](./docs/guides/schemas.md)
+- [`docs/guides/tables.md`](./docs/guides/tables.md)
+- [`docs/guides/columns.md`](./docs/guides/columns.md)
+- [`docs/guides/snapshot.md`](./docs/guides/snapshot.md)
+- [`docs/guides/architecture.md`](./docs/guides/architecture.md)
