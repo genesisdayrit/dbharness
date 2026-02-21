@@ -31,6 +31,7 @@ The command uses an interactive flow:
 - `snowflake`
 - `mysql`
 - `bigquery`
+- `sqlite`
 
 ## Output
 

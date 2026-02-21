@@ -8,6 +8,7 @@ currently supported connection types:
 - `snowflake`
 - `mysql`
 - `bigquery`
+- `sqlite`
 
 ## General setup instructions
 
@@ -57,6 +58,7 @@ in JSON).
 | `snowflake` | `account`, `user`, `role`, `warehouse` (+ optional `database`, `schema`) | External browser SSO or username/password |
 | `mysql` | `host`, `port`, `user`, `password`, optional default database/schema, `tls` | Username/password |
 | `bigquery` | `project_id`, optional default dataset (`schema`) | ADC or service account JSON file |
+| `sqlite` | `database` (SQLite file path) | File-based (no network auth) |
 
 ---
 
@@ -244,6 +246,33 @@ BigQuery supports:
   "database": "my-gcp-project",
   "schema": "analytics",
   "credentials_file": "/secrets/bigquery-sa.json"
+}
+```
+
+---
+
+## SQLite connection setup
+
+### Prompts
+
+- SQLite file path (required)
+
+### SQLite config notes
+
+- SQLite is file-based and does not require `host`, `port`, `user`, or `password`.
+- dbh stores the SQLite path in the `database` field for compatibility with
+  existing workflows.
+- The primary logical database/schema for SQLite is `main`.
+
+### Example config
+
+```json
+{
+  "name": "local-sqlite",
+  "environment": "local",
+  "type": "sqlite",
+  "primary": false,
+  "database": "/path/to/app.db"
 }
 ```
 

@@ -697,6 +697,10 @@ func resolveGenerationDatabase(opts Options) (string, error) {
 		return configured, nil
 	}
 
+	if strings.EqualFold(strings.TrimSpace(opts.DatabaseType), "sqlite") {
+		return "main", nil
+	}
+
 	if requiresExplicitDefaultDatabase(opts.DatabaseType) {
 		return "", fmt.Errorf(
 			`no default database configured for connection %q (%s): select a database from this connection and set it as the default`,

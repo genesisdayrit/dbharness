@@ -155,6 +155,12 @@ The command uses the same connection resolution as other commands:
 - Sample: `SELECT * FROM \`project.dataset.table\` ORDER BY RAND() LIMIT 10`
 - System datasets (`INFORMATION_SCHEMA`, `_SESSION`, `_SCRIPT`) are excluded
 
+### SQLite
+
+- Columns: Uses `PRAGMA table_info(<table>)`
+- Sample: `SELECT * FROM "<schema>"."<table>" ORDER BY RANDOM() LIMIT 10`
+- Internal SQLite tables (`sqlite_%`) are excluded
+
 ## Re-generating
 
 Running `dbh tables` again overwrites existing column and sample files with fresh data. This is useful after schema changes or when you want new sample data.

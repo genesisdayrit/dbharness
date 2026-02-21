@@ -91,6 +91,37 @@ func TestGenerate_RequiresDefaultDatabaseSelectionWhenMissing(t *testing.T) {
 	}
 }
 
+func TestGenerate_AllowsSQLiteWithoutConfiguredDefaultDatabase(t *testing.T) {
+	baseDir := t.TempDir()
+
+	schemas := []discovery.SchemaInfo{
+		{
+			Name: "main",
+			Tables: []discovery.TableInfo{
+				{Name: "users", TableType: "BASE TABLE"},
+			},
+		},
+	}
+
+	opts := Options{
+		ConnectionName: "local-sqlite",
+		DatabaseType:   "sqlite",
+		BaseDir:        baseDir,
+	}
+
+	if err := Generate(schemas, opts); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	df, raw := readDatabasesFile(t, baseDir, "local-sqlite")
+	if df.DefaultDatabase != "main" {
+		t.Fatalf("default database = %q, want %q", df.DefaultDatabase, "main")
+	}
+	if !strings.Contains(raw, "default_database: main") {
+		t.Fatalf("expected _databases.yml to contain sqlite default database, got:\n%s", raw)
+	}
+}
+
 func TestGenerate_SortsSchemasAndTablesAndIncludesTableDetails(t *testing.T) {
 	baseDir := t.TempDir()
 
