@@ -83,6 +83,7 @@ databases. New entries are appended in alphabetical order.
 - `snowflake`
 - `mysql`
 - `bigquery`
+- `sqlite`
 
 ## Related guides
 

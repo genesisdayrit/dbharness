@@ -60,7 +60,7 @@ The following fields are shared across all database types:
 | Field | Required | Default | Notes |
 |-------|----------|---------|-------|
 | Connection name | Yes | — | Must be unique across connections |
-| Database type | Yes | — | Interactive selector: `postgres`, `redshift`, `snowflake`, `mysql`, `bigquery` |
+| Database type | Yes | — | Interactive selector: `postgres`, `redshift`, `snowflake`, `mysql`, `bigquery`, `sqlite` |
 | Environment | No | — | Interactive selector: `production`, `staging`, `development`, `local`, `testing`, or skip |
 
 ### Postgres fields
@@ -117,6 +117,12 @@ The following fields are shared across all database types:
 | Project ID | Yes | — | Saved to `project_id` (and mirrored to `database` for compatibility) |
 | Default dataset | No | — | Saved to `schema`; press Enter to skip |
 | Service account JSON file path | No | — | Saved to `credentials_file`; leave blank to use ADC |
+
+### SQLite fields
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| SQLite file path | Yes | — | Saved to `database`; e.g. `/path/to/app.db` |
 
 ## Snowflake example
 
@@ -251,6 +257,6 @@ The `environment` field is omitted from the JSON when left blank. Type-specific
 fields are omitted when not applicable (e.g. `host`, `port`, `sslmode` for
 Postgres; `account`, `role`, `warehouse`, `schema`, `authenticator` for
 Snowflake; `host`, `port`, `tls` for MySQL; `project_id`, `credentials_file`
-for BigQuery. Redshift uses the same `host`, `port`, `database`, `user`,
+for BigQuery; network/auth fields for SQLite.) Redshift uses the same `host`, `port`, `database`, `user`,
 `password`, and `sslmode` fields as Postgres, but defaults to port `5439` and
 typically uses `sslmode: require`.)

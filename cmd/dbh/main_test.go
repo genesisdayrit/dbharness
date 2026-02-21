@@ -251,6 +251,60 @@ func TestRequiresExplicitDatabaseSelection(t *testing.T) {
 	}
 }
 
+func TestResolveSQLiteDefaultDatabase(t *testing.T) {
+	tests := []struct {
+		name      string
+		databases []string
+		want      string
+	}{
+		{
+			name:      "prefers main",
+			databases: []string{"analytics", "main", "reporting"},
+			want:      "main",
+		},
+		{
+			name:      "falls back to first discovered",
+			databases: []string{"analytics", "reporting"},
+			want:      "analytics",
+		},
+		{
+			name:      "empty list uses main",
+			databases: nil,
+			want:      "main",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveSQLiteDefaultDatabase(tt.databases); got != tt.want {
+				t.Fatalf("resolveSQLiteDefaultDatabase(%v) = %q, want %q", tt.databases, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPingDatabaseSQLite(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "local.db")
+	if err := pingDatabase(databaseConfig{
+		Type:     "sqlite",
+		Database: dbPath,
+	}); err != nil {
+		t.Fatalf("pingDatabase(sqlite) error = %v", err)
+	}
+}
+
+func TestPingDatabaseSQLiteRequiresFilePath(t *testing.T) {
+	err := pingDatabase(databaseConfig{
+		Type: "sqlite",
+	})
+	if err == nil {
+		t.Fatalf("pingDatabase(sqlite) error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "file path") {
+		t.Fatalf("pingDatabase(sqlite) error = %q, want file path guidance", err)
+	}
+}
+
 func TestSetPrimaryConnectionSwitchesPrimary(t *testing.T) {
 	cfg := config{
 		Connections: []databaseConfig{

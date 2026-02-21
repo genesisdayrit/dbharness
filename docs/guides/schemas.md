@@ -151,6 +151,12 @@ schemas are excluded (`information_schema`, `mysql`, `performance_schema`,
 Treats datasets as schema equivalents and discovers them from the configured
 project (stored in `project_id` / `database`).
 
+### SQLite
+
+Treats attached SQLite databases as schema equivalents (for most connections,
+this is `main`). Tables and views are discovered from each database's
+`sqlite_master`, excluding internal objects with names prefixed `sqlite_`.
+
 ## Re-generating
 
 Running `dbh schemas` again overwrites the existing context files with fresh data. This is useful after schema changes (new tables, dropped schemas, etc.).
@@ -159,7 +165,7 @@ Running `dbh schemas` again overwrites the existing context files with fresh dat
 
 For `postgres`, `redshift`, `snowflake`, `mysql`, and `bigquery`, `dbh schemas`
 generates context for only one configured default database (or project for
-BigQuery).
+BigQuery). For `sqlite`, dbh uses `main` when no default database is configured.
 
 Behavior:
 

@@ -31,6 +31,7 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"gopkg.in/yaml.v3"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
@@ -754,9 +755,18 @@ func runSchemas(args []string) {
 	fmt.Printf("Total: %d table(s) across %d schema(s)\n", totalTables, len(schemas))
 	fmt.Println()
 
+	contextDatabaseName := strings.TrimSpace(dbCfg.Database)
+	if isSQLiteConnectionType(dbCfg.Type) {
+		discoveredDatabases := make([]string, 0, len(schemas))
+		for _, schema := range schemas {
+			discoveredDatabases = append(discoveredDatabases, schema.Name)
+		}
+		contextDatabaseName = resolveSQLiteDefaultDatabase(discoveredDatabases)
+	}
+
 	opts := contextgen.Options{
 		ConnectionName: dbCfg.Name,
-		DatabaseName:   dbCfg.Database,
+		DatabaseName:   contextDatabaseName,
 		DatabaseType:   dbCfg.Type,
 		BaseDir:        baseDir,
 	}
@@ -766,7 +776,7 @@ func runSchemas(args []string) {
 		os.Exit(1)
 	}
 
-	dbName := sanitizeSchemaName(dbCfg.Database)
+	dbName := sanitizeSchemaName(contextDatabaseName)
 	if dbName == "" {
 		dbName = "_default"
 	}
@@ -836,7 +846,9 @@ func runTables(args []string) {
 		fmt.Printf("\n--- Database: %s ---\n", database)
 
 		dbCfgCopy := dbCfg
-		dbCfgCopy.Database = database
+		if !isSQLiteConnectionType(dbCfg.Type) {
+			dbCfgCopy.Database = database
+		}
 
 		processDatabase(dbCfgCopy, baseDir, database)
 	}
@@ -916,7 +928,9 @@ func runColumns(args []string) {
 		fmt.Printf("\n--- Database: %s ---\n", database)
 
 		dbCfgCopy := dbCfg
-		dbCfgCopy.Database = database
+		if !isSQLiteConnectionType(dbCfg.Type) {
+			dbCfgCopy.Database = database
+		}
 
 		processDatabaseColumns(dbCfgCopy, baseDir, database)
 	}
@@ -1197,7 +1211,7 @@ func estimateRemainingDuration(elapsed time.Duration, processedColumns, remainin
 func selectDatabasesForTables(cfg *config, dbCfg *databaseConfig, configPath string) ([]string, error) {
 	defaultDB := strings.TrimSpace(dbCfg.Database)
 
-	if defaultDB != "" {
+	if !isSQLiteConnectionType(dbCfg.Type) && defaultDB != "" {
 		// Ask whether to use default database or select databases
 		choice, err := promptSelectRequired(
 			fmt.Sprintf("Database selection (default: %s)", defaultDB),
@@ -1274,7 +1288,7 @@ func selectDatabasesForTables(cfg *config, dbCfg *databaseConfig, configPath str
 	}
 
 	// If no default database, prompt to save one
-	if strings.TrimSpace(dbCfg.Database) == "" && len(selected) > 0 {
+	if !isSQLiteConnectionType(dbCfg.Type) && strings.TrimSpace(dbCfg.Database) == "" && len(selected) > 0 {
 		updated, err := setConnectionDefaultDatabase(cfg, dbCfg.Name, selected[0])
 		if err == nil && updated {
 			if err := writeConfig(configPath, *cfg); err == nil {
@@ -1677,7 +1691,9 @@ func runDatabases(args []string) {
 	fmt.Println()
 
 	defaultDatabase := strings.TrimSpace(dbCfg.Database)
-	if defaultDatabase == "" {
+	if isSQLiteConnectionType(dbCfg.Type) {
+		defaultDatabase = resolveSQLiteDefaultDatabase(databases)
+	} else if defaultDatabase == "" {
 		switch len(databases) {
 		case 0:
 			defaultDatabase = "_default"
@@ -1711,11 +1727,10 @@ func runDatabases(args []string) {
 			}
 		}
 	}
-	dbCfg.Database = defaultDatabase
 
 	opts := contextgen.Options{
 		ConnectionName: dbCfg.Name,
-		DatabaseName:   dbCfg.Database,
+		DatabaseName:   defaultDatabase,
 		DatabaseType:   dbCfg.Type,
 		BaseDir:        baseDir,
 	}
@@ -1812,6 +1827,22 @@ func findPrimaryConnection(cfg config) (databaseConfig, error) {
 func sanitizeSchemaName(name string) string {
 	r := strings.NewReplacer("/", "_", "\\", "_", " ", "_", ".", "_")
 	return strings.ToLower(r.Replace(name))
+}
+
+func isSQLiteConnectionType(databaseType string) bool {
+	return strings.EqualFold(strings.TrimSpace(databaseType), "sqlite")
+}
+
+func resolveSQLiteDefaultDatabase(databases []string) string {
+	for _, database := range databases {
+		if strings.EqualFold(strings.TrimSpace(database), "main") {
+			return "main"
+		}
+	}
+	if len(databases) > 0 {
+		return strings.TrimSpace(databases[0])
+	}
+	return "main"
 }
 
 func requiresExplicitDatabaseSelection(databaseType string) bool {
@@ -1956,6 +1987,8 @@ func pingDatabase(entry databaseConfig) error {
 		return pingMySQL(entry)
 	case "bigquery":
 		return pingBigQuery(entry)
+	case "sqlite":
+		return pingSQLite(entry)
 	default:
 		return fmt.Errorf("unsupported database type %q", entry.Type)
 	}
@@ -2135,6 +2168,28 @@ func pingBigQuery(entry databaseConfig) error {
 	datasetIterator := client.Datasets(ctx)
 	if _, err := datasetIterator.Next(); err != nil && !errors.Is(err, iterator.Done) {
 		return fmt.Errorf("list bigquery datasets: %w", err)
+	}
+
+	return nil
+}
+
+func pingSQLite(entry databaseConfig) error {
+	databasePath := strings.TrimSpace(entry.Database)
+	if databasePath == "" {
+		return fmt.Errorf("sqlite database file path is required")
+	}
+
+	db, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		return fmt.Errorf("open sqlite connection: %w", err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping sqlite: %w", err)
 	}
 
 	return nil
@@ -2375,6 +2430,10 @@ func collectBigQueryConfig(entry *databaseConfig) {
 	entry.CredentialsFile = readLine()
 }
 
+func collectSQLiteConfig(entry *databaseConfig) {
+	entry.Database = promptStringRequired("SQLite file path")
+}
+
 func addConnectionEntry(targetDir string, firstInit bool) {
 	configPath := filepath.Join(targetDir, "config.json")
 	cfg, err := readConfig(configPath)
@@ -2392,7 +2451,7 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		fmt.Printf("  %q already exists, choose another.\n", name)
 	}
 
-	dbType := promptSelect("Database type", []string{"postgres", "redshift", "snowflake", "mysql", "bigquery"})
+	dbType := promptSelect("Database type", []string{"postgres", "redshift", "snowflake", "mysql", "bigquery", "sqlite"})
 	environment := promptSelect("Environment", []string{
 		"production", "staging", "development", "local", "testing", "(skip for now)",
 	})
@@ -2417,6 +2476,8 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		collectMySQLConfig(&entry)
 	case "bigquery":
 		collectBigQueryConfig(&entry)
+	case "sqlite":
+		collectSQLiteConfig(&entry)
 	}
 
 	primary := firstInit

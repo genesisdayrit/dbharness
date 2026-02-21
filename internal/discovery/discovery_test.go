@@ -226,6 +226,18 @@ func TestQuoteBigQueryIdentifier(t *testing.T) {
 	}
 }
 
+func TestQuoteSQLiteIdentifier(t *testing.T) {
+	got := quoteSQLiteIdentifier("orders")
+	if got != `"orders"` {
+		t.Fatalf("quoteSQLiteIdentifier(simple) = %q, want %q", got, `"orders"`)
+	}
+
+	got = quoteSQLiteIdentifier(`order"name`)
+	if got != `"order""name"` {
+		t.Fatalf("quoteSQLiteIdentifier(escaped) = %q, want %q", got, `"order""name"`)
+	}
+}
+
 func TestBigQueryFieldDataType(t *testing.T) {
 	stringField := &gcpbigquery.FieldSchema{
 		Name: "customer_id",

@@ -127,3 +127,7 @@ func quoteMySQLIdentifier(identifier string) string {
 func quoteBigQueryIdentifier(identifier string) string {
 	return "`" + strings.ReplaceAll(identifier, "`", "``") + "`"
 }
+
+func quoteSQLiteIdentifier(identifier string) string {
+	return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
+}
