@@ -2,7 +2,7 @@
 
 # dbharness (dbh)
 
-> AI-Ready Database Contexts
+> Turn your Database Context into LLM-Friendly Files
 
 `dbharness` is a CLI tool that syncs your database context to LLM-ready files for use with coding agents. It gives developers and LLMs a shared, always-current schema map so they can answer data questions and generate better code without rediscovering the database from scratch.
 
