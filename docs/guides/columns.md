@@ -22,6 +22,16 @@ The command uses an interactive flow:
 4. Lets you select tables per selected schema (including a "Select all" option).
 5. Profiles each selected column and writes enriched YAML files.
 
+## Supported databases
+
+`dbh columns` enrichment is supported for:
+
+- `postgres`
+- `redshift`
+- `snowflake`
+- `mysql`
+- `bigquery`
+
 ## Output
 
 For each selected table:

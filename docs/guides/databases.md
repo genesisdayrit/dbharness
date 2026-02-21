@@ -76,6 +76,14 @@ databases. New entries are appended in alphabetical order.
 | `-s name` | Uses the connection with the given name |
 | `--name name` | Same as `-s` |
 
+## Supported databases
+
+- `postgres`
+- `redshift`
+- `snowflake`
+- `mysql`
+- `bigquery`
+
 ## Related guides
 
 - [`schemas.md`](./schemas.md) for `_schemas.yml` and per-schema `_tables.yml`

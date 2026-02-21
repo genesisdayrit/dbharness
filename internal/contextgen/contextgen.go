@@ -710,7 +710,7 @@ func resolveGenerationDatabase(opts Options) (string, error) {
 
 func requiresExplicitDefaultDatabase(databaseType string) bool {
 	switch strings.ToLower(strings.TrimSpace(databaseType)) {
-	case "postgres", "snowflake", "mysql", "bigquery":
+	case "postgres", "redshift", "snowflake", "mysql", "bigquery":
 		return true
 	default:
 		return false

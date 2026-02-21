@@ -151,6 +151,34 @@ func TestQuoteMySQLIdentifier(t *testing.T) {
 	}
 }
 
+func TestQuoteRedshiftIdentifier(t *testing.T) {
+	got := quoteRedshiftIdentifier("events")
+	if got != `"events"` {
+		t.Fatalf("quoteRedshiftIdentifier(simple) = %q, want %q", got, `"events"`)
+	}
+
+	got = quoteRedshiftIdentifier(`event"name`)
+	if got != `"event""name"` {
+		t.Fatalf("quoteRedshiftIdentifier(escaped) = %q, want %q", got, `"event""name"`)
+	}
+}
+
+func TestBuildRedshiftConnString_DefaultPortAndSSLMode(t *testing.T) {
+	cfg := DatabaseConfig{
+		Host:     "redshift-cluster.amazonaws.com",
+		User:     "analyst",
+		Password: "secret",
+		Port:     0,
+		SSLMode:  "",
+	}
+
+	got := buildRedshiftConnString(cfg, "analytics")
+	want := "host=redshift-cluster.amazonaws.com port=5439 user=analyst password=secret dbname=analytics sslmode=require"
+	if got != want {
+		t.Fatalf("buildRedshiftConnString(...) = %q, want %q", got, want)
+	}
+}
+
 func TestBuildMySQLDSN_DefaultPortAndParseTime(t *testing.T) {
 	cfg := DatabaseConfig{
 		Host:     "localhost",
