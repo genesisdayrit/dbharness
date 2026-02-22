@@ -81,6 +81,64 @@ dbh init --force
 
 When `.dbharness/` already exists, `dbh init --force` creates a full timestamped backup in `.dbharness-snapshots/<yyyymmdd_hhmm_ss>/` before overwriting. The backup includes the entire `.dbharness/` directory, not just `config.json`.
 
+### `dbh sync`
+
+Runs the full discovery workflow in one command:
+
+```bash
+# Use the primary connection
+dbh sync
+
+# Use a specific connection
+dbh sync -s my-db
+```
+
+`dbh sync` executes these commands in order:
+
+1. `dbh databases`
+2. `dbh schemas`
+3. `dbh tables`
+
+Each stage prints progress and status. If a stage fails, dbh continues to the
+next stage and prints a summary at the end.
+
+---
+
+### Sub-commands
+
+The following commands can also be run individually for more control over each stage of the discovery workflow.
+
+### `dbh databases`
+
+Connects to a database and discovers all accessible databases, writing a catalog file to `.dbharness/context/connections/<name>/databases/_databases.yml`:
+
+```bash
+# Use the primary connection
+dbh databases
+
+# Use a specific connection
+dbh databases -s my-db
+```
+
+The command:
+
+- queries the database server for all accessible databases
+- prompts you to select a default database (if multiple are found and none is configured)
+- writes the default selection to both `config.json` and `_databases.yml`
+
+Example `_databases.yml` output:
+
+```yaml
+connection: my-db
+database_type: postgres
+default_database: myapp
+generated_at: "2026-02-22T14:30:45Z"
+databases:
+  - name: analytics
+  - name: myapp
+  - name: staging
+```
+
 ### `dbh schemas`
 
 Connects to a database and generates LLM-friendly schema context files in `.dbharness/context/connections/`:
@@ -108,27 +166,6 @@ This creates a nested directory structure:
 ```
 
 The YAML files are designed for AI coding agents (Claude Code, Cursor, etc.) to discover and explore database structures. Re-running the command refreshes the files with the latest schema data.
-
-### `dbh sync`
-
-Runs the full discovery workflow in one command:
-
-```bash
-# Use the primary connection
-dbh sync
-
-# Use a specific connection
-dbh sync -s my-db
-```
-
-`dbh sync` executes these commands in order:
-
-1. `dbh databases`
-2. `dbh schemas`
-3. `dbh tables`
-
-Each stage prints progress and status. If a stage fails, dbh continues to the
-next stage and prints a summary at the end.
 
 ### `dbh tables`
 
