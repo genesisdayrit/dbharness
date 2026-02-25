@@ -1,6 +1,6 @@
 # AGENTS Guide for `.dbharness`
 
-This file is a navigation guide for coding agents (Codex, Claude Code, Cursor, Amp, etc.) working with dbharness context.
+This file is a navigation guide for coding agents working with dbharness context.
 
 ## Goal
 
