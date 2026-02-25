@@ -75,6 +75,9 @@ func TestInstallTemplateForceCreatesFullSnapshot(t *testing.T) {
 		t.Fatalf("new config should not equal previous config after force install")
 	}
 
+	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "Recommended traversal order")
+	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "10 sample rows")
+
 	gitignoreData, err := os.ReadFile(".gitignore")
 	if err != nil {
 		t.Fatalf("read project .gitignore: %v", err)
@@ -82,6 +85,32 @@ func TestInstallTemplateForceCreatesFullSnapshot(t *testing.T) {
 	if !strings.Contains(string(gitignoreData), ".dbharness-snapshots/") {
 		t.Fatalf("project .gitignore should include .dbharness-snapshots/, got:\n%s", string(gitignoreData))
 	}
+}
+
+func TestInstallTemplateFreshIncludesAgentsGuide(t *testing.T) {
+	projectDir := t.TempDir()
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatalf("chdir to temp project: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(originalWD)
+	}()
+
+	targetDir := ".dbharness"
+	snapshotPath, err := installTemplate(targetDir, false)
+	if err != nil {
+		t.Fatalf("installTemplate(..., false) error = %v", err)
+	}
+	if snapshotPath != "" {
+		t.Fatalf("snapshotPath = %q, want empty", snapshotPath)
+	}
+
+	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "Multi-connection rule")
+	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "always start with the primary/default connection")
 }
 
 func assertFileContent(t *testing.T, path, expected string) {
@@ -93,6 +122,18 @@ func assertFileContent(t *testing.T, path, expected string) {
 	}
 	if string(data) != expected {
 		t.Fatalf("content of %s = %q, want %q", path, string(data), expected)
+	}
+}
+
+func assertFileContains(t *testing.T, path, expectedSubstring string) {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if !strings.Contains(string(data), expectedSubstring) {
+		t.Fatalf("content of %s did not contain %q", path, expectedSubstring)
 	}
 }
 
