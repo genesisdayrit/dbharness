@@ -1,11 +1,13 @@
 # Architecture
 
 This document describes the `.dbharness/context/` directory structure — what is currently implemented and the full future vision.
+For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
 
 ## Current Structure (implemented)
 
 ```
 .dbharness/
+  AGENTS.md
   config.json
   context/
     connections/
@@ -43,6 +45,7 @@ This document describes the `.dbharness/context/` directory structure — what i
 
 ```
 .dbharness/
+  AGENTS.md
   config.json
   context/
     connections/

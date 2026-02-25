@@ -9,7 +9,9 @@ connection types), see [`connections.md`](./connections.md).
 
 Running `dbh init` in a project without an existing `.dbharness/` folder will:
 
-1. Create the `.dbharness/` directory with a `config.json`
+1. Create the `.dbharness/` directory with:
+   - `config.json`
+   - `AGENTS.md` (token-efficient navigation guide for coding agents)
 2. Prompt you interactively to configure your first connection
 
 ```

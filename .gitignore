@@ -1,6 +1,8 @@
 .env
 .context/
 .dbharness/
+!internal/template/.dbharness/
+!internal/template/.dbharness/**
 .dbharness-snapshots/
 dbh
 docs/plans/

@@ -22,7 +22,7 @@ go install github.com/genesisdayrit/dbharness/cmd/dbh@latest
 
 ### 2) Initialize your project
 
-Run `dbh init` in your project directory to create `.dbharness/` and configure a database connection:
+Run `dbh init` in your project directory to create `.dbharness/` (including `AGENTS.md`) and configure a database connection:
 
 ```bash
 dbh init

@@ -6,6 +6,7 @@ This folder is installed by the dbh CLI.
 
 ```
 .dbharness/
+  AGENTS.md                                     # Token-efficient navigation guide for coding agents
   config.json                                   # Database connection configuration
   context/                                      # LLM-friendly schema context files (generated)
     connections/
