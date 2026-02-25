@@ -9,7 +9,7 @@
 - **Build:** `go build -o dbh ./cmd/dbh`
 - **Test:** `go test ./...` — all tests are self-contained (use in-memory SQLite, no external databases needed)
 - **Lint:** `go vet ./...` — no golangci-lint config; `go vet` is the primary static analysis tool
-- **Dependencies:** `go mod download`
+- **Dependencies:** `go mod download` — the VM startup script also runs `go test ./...` to warm the build cache, so first builds/tests after boot are near-instant
 
 ### Running the CLI
 
