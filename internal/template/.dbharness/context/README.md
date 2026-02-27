@@ -6,12 +6,14 @@ For token-efficient exploration, start with `../AGENTS.md` before reading files 
 
 ## Structure
 
-After running `dbh schemas`, the following structure is created for each connection:
+After running discovery commands (`dbh databases`, `dbh schemas`, `dbh tables`, `dbh columns`),
+the following structure is created and updated:
 
 ```
 context/
   connections/
     <connection-name>/
+      MEMORY.md                        # Long-term memory maintained by coding agents
       databases/
         _databases.yml                   # List of databases in this connection
         <database-name>/
@@ -19,14 +21,21 @@ context/
             _schemas.yml                 # Overview of all schemas in the database
             <schema-name>/
               _tables.yml                # All tables and views in this schema
+  workspaces/
+    default/
+      logs/
+        YYYY-MM-DD.md                  # Session notes (daily)
 ```
 
 ## How to use (for LLMs / AI agents)
 
-1. Start with `_databases.yml` to see which databases exist under this connection
-2. Navigate into `<database>/schemas/_schemas.yml` to see which schemas exist and how many tables each contains
-3. Navigate into `<schema>/_tables.yml` for detailed table listings
-4. Use the `description` fields (when populated) for additional context about what each schema or table contains
+1. Start with `../AGENTS.md` for traversal + memory-writing guidance.
+2. Read `connections/<connection>/MEMORY.md` for previously promoted durable facts.
+3. Read `_databases.yml` to see which databases exist under this connection.
+4. Navigate into `<database>/schemas/_schemas.yml` to see which schemas exist and how many tables each contains.
+5. Navigate into `<schema>/_tables.yml` for detailed table listings.
+6. Use the `description` fields (when populated) for additional context about what each schema or table contains.
+7. Append session-level notes to `workspaces/default/logs/YYYY-MM-DD.md` (or the active workspace).
 
 ## Generating context files
 

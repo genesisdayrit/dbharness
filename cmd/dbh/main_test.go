@@ -77,6 +77,8 @@ func TestInstallTemplateForceCreatesFullSnapshot(t *testing.T) {
 
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "Recommended traversal order")
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "10 sample rows")
+	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "## Memory Writing")
+	assertDirectoryEmpty(t, filepath.Join(targetDir, "context", "workspaces", defaultWorkspaceName, "logs"))
 
 	gitignoreData, err := os.ReadFile(".gitignore")
 	if err != nil {
@@ -111,6 +113,41 @@ func TestInstallTemplateFreshIncludesAgentsGuide(t *testing.T) {
 
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "Multi-connection rule")
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "always start with the primary/default connection")
+	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "## Memory Writing")
+	assertDirectoryEmpty(t, filepath.Join(targetDir, "context", "workspaces", defaultWorkspaceName, "logs"))
+}
+
+func TestEnsureConnectionMemoryFileCreatesTemplate(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	connectionName := "analytics"
+
+	if err := ensureConnectionMemoryFile(baseDir, connectionName); err != nil {
+		t.Fatalf("ensureConnectionMemoryFile(...) error = %v", err)
+	}
+
+	memoryPath := filepath.Join(baseDir, "context", "connections", connectionName, "MEMORY.md")
+	assertFileContent(t, memoryPath, "# Long-Term Memory — analytics\n\nFacts, schema quirks, naming conventions, and query preferences discovered during agent sessions.\nPromoted and maintained automatically by coding agents following the criteria in AGENTS.md.\n")
+}
+
+func TestEnsureConnectionMemoryFileDoesNotOverwriteExistingFile(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	connectionName := "warehouse"
+	memoryPath := filepath.Join(baseDir, "context", "connections", connectionName, "MEMORY.md")
+
+	if err := os.MkdirAll(filepath.Dir(memoryPath), 0o755); err != nil {
+		t.Fatalf("mkdir memory directory: %v", err)
+	}
+
+	const customContent = "# Existing memory\n- keep this\n"
+	if err := os.WriteFile(memoryPath, []byte(customContent), 0o644); err != nil {
+		t.Fatalf("write existing memory file: %v", err)
+	}
+
+	if err := ensureConnectionMemoryFile(baseDir, connectionName); err != nil {
+		t.Fatalf("ensureConnectionMemoryFile(...) error = %v", err)
+	}
+
+	assertFileContent(t, memoryPath, customContent)
 }
 
 func assertFileContent(t *testing.T, path, expected string) {
@@ -134,6 +171,26 @@ func assertFileContains(t *testing.T, path, expectedSubstring string) {
 	}
 	if !strings.Contains(string(data), expectedSubstring) {
 		t.Fatalf("content of %s did not contain %q", path, expectedSubstring)
+	}
+}
+
+func assertDirectoryEmpty(t *testing.T, path string) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("%s is not a directory", path)
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", path, err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected %s to be empty, found %d entries", path, len(entries))
 	}
 }
 

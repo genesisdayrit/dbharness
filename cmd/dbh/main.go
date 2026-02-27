@@ -99,6 +99,15 @@ type syncStageRunner func(subcommand string, args []string) error
 
 var defaultSyncStageRunner syncStageRunner = runSelfSubcommand
 
+const (
+	defaultWorkspaceName     = "default"
+	connectionMemoryTemplate = `# Long-Term Memory — %s
+
+Facts, schema quirks, naming conventions, and query preferences discovered during agent sessions.
+Promoted and maintained automatically by coding agents following the criteria in AGENTS.md.
+`
+)
+
 func runSync(args []string) {
 	flags := flag.NewFlagSet("sync", flag.ExitOnError)
 	shortName := flags.String("s", "", "Connection name from config.json.")
@@ -2226,8 +2235,48 @@ func installTemplate(targetDir string, force bool) (string, error) {
 	if err := copyFS(root, targetDir); err != nil {
 		return "", err
 	}
+	if err := ensureWorkspaceLogsDir(targetDir); err != nil {
+		return "", err
+	}
 
 	return snapshotPath, nil
+}
+
+func ensureWorkspaceLogsDir(baseDir string) error {
+	logsDir := filepath.Join(baseDir, "context", "workspaces", defaultWorkspaceName, "logs")
+	if err := os.MkdirAll(logsDir, 0o755); err != nil {
+		return fmt.Errorf("create default workspace logs directory: %w", err)
+	}
+	return nil
+}
+
+func ensureConnectionMemoryFile(baseDir, connectionName string) error {
+	connectionName = strings.TrimSpace(connectionName)
+	if connectionName == "" {
+		return fmt.Errorf("connection name is required")
+	}
+
+	connectionDir := filepath.Join(baseDir, "context", "connections", connectionName)
+	if err := os.MkdirAll(connectionDir, 0o755); err != nil {
+		return fmt.Errorf("create connection context directory: %w", err)
+	}
+
+	memoryPath := filepath.Join(connectionDir, "MEMORY.md")
+	if info, err := os.Stat(memoryPath); err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("memory path is a directory: %s", memoryPath)
+		}
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check memory file: %w", err)
+	}
+
+	memoryContent := fmt.Sprintf(connectionMemoryTemplate, connectionName)
+	if err := os.WriteFile(memoryPath, []byte(memoryContent), 0o644); err != nil {
+		return fmt.Errorf("write memory file: %w", err)
+	}
+
+	return nil
 }
 
 func createSnapshotDir(sourceDir string) (string, error) {
@@ -2506,6 +2555,15 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		for i := range cfg.Connections {
 			cfg.Connections[i].Primary = false
 		}
+	}
+
+	if err := ensureWorkspaceLogsDir(targetDir); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := ensureConnectionMemoryFile(targetDir, entry.Name); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	cfg.Connections = append(cfg.Connections, entry)
