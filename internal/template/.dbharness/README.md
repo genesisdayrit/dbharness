@@ -8,9 +8,10 @@ Database context for LLM agents and developers. Installed by the `dbh` CLI, this
 .dbharness/
   AGENTS.md          # Navigation guide for coding agents
   config.json        # Database connection configuration
-  context/           # Auto-generated schema context (see below)
+  context/           # Schema context + memory/workspace files
     connections/
       <connection>/
+        MEMORY.md                    # Long-term memory for this connection
         databases/
           _databases.yml              # Accessible databases
           <database>/
@@ -21,6 +22,10 @@ Database context for LLM agents and developers. Installed by the `dbh` CLI, this
                 <table>/
                   <table>__columns.yml  # Column metadata + profiling stats
                   <table>__sample.xml   # Sample rows (up to 10)
+    workspaces/
+      default/
+        logs/
+          YYYY-MM-DD.md             # Session notes (default workspace)
 ```
 
 ## Commands

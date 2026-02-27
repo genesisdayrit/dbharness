@@ -12,6 +12,7 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
   context/
     connections/
       <connection-name>/
+        MEMORY.md
         databases/
           _databases.yml
           <database>/
@@ -22,17 +23,31 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
                 <table>/
                   <table_name>__columns.yml
                   <table_name>__sample.xml
+    workspaces/
+      default/
+        logs/
+          YYYY-MM-DD.md
 ```
+
+### Two-tier memory model
+
+- **Long-term memory (implemented):**
+  - Connection-level Markdown file at `context/connections/<name>/MEMORY.md`
+  - Stores durable, high-confidence facts (schema quirks, naming conventions, query preferences)
+- **Session memory (implemented):**
+  - Workspace-level daily notes at `context/workspaces/<workspace>/logs/YYYY-MM-DD.md`
+  - `default` workspace is created during `dbh init`, so session logs always have a landing directory
 
 ### Levels
 
-| Level | Directory | Index File | Description |
+| Level | Directory | Index/File | Description |
 |-------|-----------|------------|-------------|
-| Connection | `connections/<name>/` | — | One directory per configured connection |
+| Connection | `connections/<name>/` | `MEMORY.md` | One directory per configured connection with long-term memory and discovered schema context |
 | Database | `databases/<name>/` | `_databases.yml` | One directory per database; index lists all databases |
 | Schema | `schemas/<name>/` | `_schemas.yml` | One directory per schema; index lists all schemas with table counts |
 | Table (index) | — | `_tables.yml` | Per-schema file listing all tables and views |
 | Table (detail) | `<table>/` | `__columns.yml`, `__sample.xml` | Per-table column metadata (basic via `dbh tables`, enriched via `dbh columns`) and sample data |
+| Workspace | `workspaces/<name>/` | `logs/YYYY-MM-DD.md` | Global workspaces for session-level notes; not scoped to a single connection |
 
 ### Naming Conventions
 
@@ -50,6 +65,7 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
   context/
     connections/
       <connection-name>/
+        MEMORY.md
         databases/
           _databases.yml
           <database>/
@@ -60,19 +76,25 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
                 <table>/
                   <table_name>__columns.yml
                   <table_name>__sample.xml
-        workspaces/
-          projects/
-          memories/
-          logs/
+    workspaces/
+      default/
+        logs/
+          YYYY-MM-DD.md
+      <workspace-name>/
+        logs/
+          YYYY-MM-DD.md
 ```
 
 ### Planned Additions
 
-- **Workspaces**: A `workspaces/` directory alongside `databases/` for project-specific context, memory, and logging.
+- **Workspace creation command**: `dbh create-workspace` / `dbh create-w` scaffolding for named workspaces.
+- **Active workspace selection**: config/env/flag support for selecting non-default workspace targets.
+- **Session transcripts**: searchable per-session transcript files with descriptive slugs.
+- **Execution logs**: structured history of executed SQL and related metadata.
 - **Schema refresh**: Automated detection and refresh of changed schemas and tables.
 
 ### What's Not Yet Implemented
 
-- `workspaces/` directory and its subdirectories (`projects/`, `memories/`, `logs/`)
-- Handling connection switches for multi-connection workflows
+- Named workspace creation commands and active workspace selection
+- Session transcript export and execution log capture
 - Automated schema change detection and refresh
