@@ -102,6 +102,8 @@ dbh sync -s my-db
 Each stage prints progress and status. If a stage fails, dbh continues to the
 next stage and prints a summary at the end.
 
+---
+
 ### Sub-commands
 
 The following commands can also be run individually for more control over each stage of the discovery workflow.
@@ -184,6 +186,65 @@ The command:
 - writes `<table>__columns.yml` and `<table>__sample.xml` files under table directories
 - overwrites existing table detail files with fresh data when re-run
 
+This extends the directory structure created by `dbh schemas`:
+
+```
+.dbharness/context/connections/my-db/databases/
+  myapp/
+    schemas/
+      public/
+        _tables.yml
+        users/
+          users__columns.yml        # Column definitions
+          users__sample.xml         # Sample rows
+        orders/
+          orders__columns.yml
+          orders__sample.xml
+```
+
+Example `users__columns.yml`:
+
+```yaml
+schema: public
+table: users
+connection: my-db
+database: myapp
+database_type: postgres
+generated_at: "2026-02-22T15:30:45Z"
+columns:
+- name: id
+  data_type: integer
+  is_nullable: "NO"
+  ordinal_position: 1
+  column_default: nextval('users_id_seq'::regclass)
+- name: name
+  data_type: character varying
+  is_nullable: "YES"
+  ordinal_position: 2
+- name: email
+  data_type: character varying
+  is_nullable: "NO"
+  ordinal_position: 3
+```
+
+Example `users__sample.xml`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<table_sample schema="public" table="users" connection="my-db" database="myapp" row_count="2" generated_at="2026-02-22T15:30:45Z">
+  <row>
+    <field name="id">1</field>
+    <field name="name">Alice</field>
+    <field name="email">alice@example.com</field>
+  </row>
+  <row>
+    <field name="id">2</field>
+    <field name="name">Bob</field>
+    <field name="email">bob@example.com</field>
+  </row>
+</table_sample>
+```
+
 For full workflow details and examples, see [`docs/guides/tables.md`](./docs/guides/tables.md).
 
 ### `dbh columns`
@@ -206,6 +267,52 @@ The command:
 - writes one enriched `<table>__columns.yml` file per selected table
 
 `dbh columns` does not modify existing `__sample.xml` files.
+
+Example enriched `users__columns.yml`:
+
+```yaml
+schema: public
+table: users
+connection: my-db
+database: myapp
+database_type: postgres
+generated_at: "2026-02-22T15:30:45Z"
+columns:
+- name: id
+  data_type: integer
+  is_nullable: "NO"
+  ordinal_position: 1
+  column_default: nextval('users_id_seq'::regclass)
+  ai_description: ""
+  db_description: ""
+  total_rows: 200
+  null_count: 0
+  non_null_count: 200
+  distinct_non_null_count: 200
+  distinct_of_non_null_pct: 100
+  null_of_total_rows_pct: 0
+  non_null_of_total_rows_pct: 100
+  sample_values:
+  - "1"
+  - "2"
+  - "3"
+- name: email
+  data_type: character varying
+  is_nullable: "YES"
+  ordinal_position: 2
+  ai_description: ""
+  db_description: ""
+  total_rows: 200
+  null_count: 20
+  non_null_count: 180
+  distinct_non_null_count: 175
+  distinct_of_non_null_pct: 97.22
+  null_of_total_rows_pct: 10
+  non_null_of_total_rows_pct: 90
+  sample_values:
+  - alice@example.com
+  - bob@example.com
+```
 
 ### `dbh workspace create`
 
