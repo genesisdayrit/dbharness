@@ -268,11 +268,11 @@ The command:
 
 `dbh columns` does not modify existing `__sample.xml` files.
 
-Example enriched `users__columns.yml`:
+Example enriched `orders__columns.yml`:
 
 ```yaml
 schema: public
-table: users
+table: orders
 connection: my-db
 database: myapp
 database_type: postgres
@@ -282,36 +282,73 @@ columns:
   data_type: integer
   is_nullable: "NO"
   ordinal_position: 1
-  column_default: nextval('users_id_seq'::regclass)
+  column_default: nextval('orders_id_seq'::regclass)
   ai_description: ""
-  db_description: ""
-  total_rows: 200
+  db_description: "Primary key"
+  total_rows: 48500
   null_count: 0
-  non_null_count: 200
-  distinct_non_null_count: 200
+  non_null_count: 48500
+  distinct_non_null_count: 48500
   distinct_of_non_null_pct: 100
   null_of_total_rows_pct: 0
   non_null_of_total_rows_pct: 100
   sample_values:
-  - "1"
-  - "2"
-  - "3"
-- name: email
+  - "10041"
+  - "10042"
+  - "10043"
+- name: status
   data_type: character varying
-  is_nullable: "YES"
+  is_nullable: "NO"
   ordinal_position: 2
   ai_description: ""
   db_description: ""
-  total_rows: 200
-  null_count: 20
-  non_null_count: 180
-  distinct_non_null_count: 175
-  distinct_of_non_null_pct: 97.22
-  null_of_total_rows_pct: 10
-  non_null_of_total_rows_pct: 90
+  total_rows: 48500
+  null_count: 0
+  non_null_count: 48500
+  distinct_non_null_count: 5
+  distinct_of_non_null_pct: 0.01
+  null_of_total_rows_pct: 0
+  non_null_of_total_rows_pct: 100
   sample_values:
-  - alice@example.com
-  - bob@example.com
+  - pending
+  - shipped
+  - delivered
+  - cancelled
+  - refunded
+- name: discount_code
+  data_type: character varying
+  is_nullable: "YES"
+  ordinal_position: 3
+  ai_description: ""
+  db_description: ""
+  total_rows: 48500
+  null_count: 31025
+  non_null_count: 17475
+  distinct_non_null_count: 42
+  distinct_of_non_null_pct: 0.24
+  null_of_total_rows_pct: 63.97
+  non_null_of_total_rows_pct: 36.03
+  sample_values:
+  - SUMMER20
+  - WELCOME10
+  - LOYALTY15
+- name: total_cents
+  data_type: bigint
+  is_nullable: "NO"
+  ordinal_position: 4
+  ai_description: ""
+  db_description: "Order total in cents"
+  total_rows: 48500
+  null_count: 0
+  non_null_count: 48500
+  distinct_non_null_count: 8923
+  distinct_of_non_null_pct: 18.4
+  null_of_total_rows_pct: 0
+  non_null_of_total_rows_pct: 100
+  sample_values:
+  - "2999"
+  - "5490"
+  - "14999"
 ```
 
 ### `dbh workspace create`
