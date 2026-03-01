@@ -310,6 +310,74 @@ func TestSetActiveWorkspaceWritesConfig(t *testing.T) {
 	}
 }
 
+func TestEnsureActiveWorkspaceSetsDefaultWhenMissing(t *testing.T) {
+	baseDir := t.TempDir()
+	configPath := filepath.Join(baseDir, "config.json")
+	if err := os.WriteFile(configPath, []byte("{\"connections\":[]}\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := ensureActiveWorkspace(configPath); err != nil {
+		t.Fatalf("ensureActiveWorkspace(...) error = %v", err)
+	}
+
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		t.Fatalf("readConfig(...) error = %v", err)
+	}
+	if cfg.ActiveWorkspace != defaultWorkspaceName {
+		t.Fatalf("config active_workspace = %q, want %q", cfg.ActiveWorkspace, defaultWorkspaceName)
+	}
+}
+
+func TestEnsureActiveWorkspacePreservesExistingValue(t *testing.T) {
+	baseDir := t.TempDir()
+	configPath := filepath.Join(baseDir, "config.json")
+	if err := os.WriteFile(configPath, []byte("{\"connections\":[],\"active_workspace\":\"marketing\"}\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := ensureActiveWorkspace(configPath); err != nil {
+		t.Fatalf("ensureActiveWorkspace(...) error = %v", err)
+	}
+
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		t.Fatalf("readConfig(...) error = %v", err)
+	}
+	if cfg.ActiveWorkspace != "marketing" {
+		t.Fatalf("config active_workspace = %q, want %q", cfg.ActiveWorkspace, "marketing")
+	}
+}
+
+func TestInstallTemplateFreshIncludesActiveWorkspace(t *testing.T) {
+	projectDir := t.TempDir()
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatalf("chdir to temp project: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(originalWD)
+	}()
+
+	targetDir := ".dbharness"
+	if _, err := installTemplate(targetDir, false); err != nil {
+		t.Fatalf("installTemplate(..., false) error = %v", err)
+	}
+
+	configPath := filepath.Join(targetDir, "config.json")
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		t.Fatalf("readConfig(...) error = %v", err)
+	}
+	if cfg.ActiveWorkspace != defaultWorkspaceName {
+		t.Fatalf("template config active_workspace = %q, want %q", cfg.ActiveWorkspace, defaultWorkspaceName)
+	}
+}
+
 func TestShouldPromptForWorkspaceActivation(t *testing.T) {
 	tests := []struct {
 		name    string
