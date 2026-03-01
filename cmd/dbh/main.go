@@ -43,6 +43,8 @@ func main() {
 	switch os.Args[1] {
 	case "init":
 		runInit(os.Args[2:])
+	case "workspace":
+		runWorkspace(os.Args[2:])
 	case "test-connection":
 		runTestConnection(os.Args[2:])
 	case "snapshot":
@@ -70,6 +72,7 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
 	fmt.Fprintln(os.Stderr, "  dbh init [--force]")
+	fmt.Fprintln(os.Stderr, "  dbh workspace create [--name <name>]")
 	fmt.Fprintln(os.Stderr, "  dbh test-connection [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh snapshot")
 	fmt.Fprintln(os.Stderr, "  dbh snapshot config")
@@ -101,12 +104,24 @@ var defaultSyncStageRunner syncStageRunner = runSelfSubcommand
 
 const (
 	defaultWorkspaceName     = "default"
+	maxWorkspaceNameLength   = 64
 	connectionMemoryTemplate = `# Long-Term Memory — %s
 
 Facts, schema quirks, naming conventions, and query preferences discovered during agent sessions.
 Promoted and maintained automatically by coding agents following the criteria in AGENTS.md.
 `
+	workspaceMemoryTemplate = `# Workspace Memory — %s
+
+Session notes, decisions, and context specific to this workspace.
+Written and maintained automatically by coding agents following the criteria in AGENTS.md.
+`
 )
+
+type workspaceMetadata struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	CreatedAt   string `yaml:"created_at"`
+}
 
 func runSync(args []string) {
 	flags := flag.NewFlagSet("sync", flag.ExitOnError)
@@ -273,8 +288,197 @@ func runInit(args []string) {
 	addConnectionEntry(targetDir, true)
 }
 
+func runWorkspace(args []string) {
+	if len(args) == 0 {
+		workspaceUsage()
+		os.Exit(2)
+	}
+
+	switch args[0] {
+	case "create":
+		runWorkspaceCreate(args[1:])
+	default:
+		workspaceUsage()
+		os.Exit(2)
+	}
+}
+
+func workspaceUsage() {
+	fmt.Fprintln(os.Stderr, "Usage:")
+	fmt.Fprintln(os.Stderr, "  dbh workspace create [--name <name>]")
+}
+
+func runWorkspaceCreate(args []string) {
+	flags := flag.NewFlagSet("workspace create", flag.ExitOnError)
+	name := flags.String("name", "", "Workspace name.")
+	_ = flags.Parse(args)
+
+	if flags.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "workspace create does not accept positional arguments")
+		os.Exit(2)
+	}
+
+	rawName := *name
+	workspaceName := strings.TrimSpace(rawName)
+	if workspaceName == "" {
+		workspaceName = promptWorkspaceName()
+	}
+
+	baseDir := filepath.Join(".", ".dbharness")
+	if err := createNamedWorkspace(baseDir, workspaceName); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Workspace %q created at .dbharness/context/workspaces/%s/\n", workspaceName, workspaceName)
+	fmt.Println("  - logs/")
+	fmt.Println("  - MEMORY.md")
+	fmt.Println("  - _workspace.yml")
+	fmt.Println()
+
+	if !shouldPromptForWorkspaceActivation(rawName) {
+		fmt.Println("Active workspace unchanged. Run 'dbh workspace set <name>' to activate later.")
+		return
+	}
+
+	if promptYesNoDefaultNo(fmt.Sprintf("Set %q as your active workspace?", workspaceName)) {
+		configPath := filepath.Join(baseDir, "config.json")
+		if err := setActiveWorkspace(configPath, workspaceName); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Printf("✓ Active workspace set to %q.\n", workspaceName)
+		return
+	}
+
+	fmt.Println("Active workspace unchanged. Run 'dbh workspace set <name>' to activate later.")
+}
+
+func shouldPromptForWorkspaceActivation(rawName string) bool {
+	return strings.TrimSpace(rawName) == ""
+}
+
+func promptWorkspaceName() string {
+	for {
+		name := strings.TrimSpace(promptStringRequired("Workspace name"))
+		if err := validateWorkspaceName(name); err != nil {
+			fmt.Println(err)
+			continue
+		}
+		return name
+	}
+}
+
+func createNamedWorkspace(baseDir, workspaceName string) error {
+	workspaceName = strings.TrimSpace(workspaceName)
+	if err := validateWorkspaceName(workspaceName); err != nil {
+		return err
+	}
+
+	info, err := os.Stat(baseDir)
+	if errors.Is(err, os.ErrNotExist) || (err == nil && !info.IsDir()) {
+		return fmt.Errorf("No .dbharness directory found. Run 'dbh init' first.")
+	}
+	if err != nil {
+		return fmt.Errorf("check .dbharness directory: %w", err)
+	}
+
+	workspaceDir := filepath.Join(baseDir, "context", "workspaces", workspaceName)
+	if _, err := os.Stat(workspaceDir); err == nil {
+		return fmt.Errorf(
+			"Workspace '%s' already exists at .dbharness/context/workspaces/%s/.",
+			workspaceName,
+			workspaceName,
+		)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check workspace directory: %w", err)
+	}
+
+	logsDir := filepath.Join(workspaceDir, "logs")
+	if err := os.MkdirAll(logsDir, 0o755); err != nil {
+		return fmt.Errorf("create workspace logs directory: %w", err)
+	}
+
+	memoryPath := filepath.Join(workspaceDir, "MEMORY.md")
+	memoryContent := fmt.Sprintf(workspaceMemoryTemplate, workspaceName)
+	if err := os.WriteFile(memoryPath, []byte(memoryContent), 0o644); err != nil {
+		return fmt.Errorf("write workspace memory file: %w", err)
+	}
+
+	metadata := workspaceMetadata{
+		Name:        workspaceName,
+		Description: "",
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+	}
+	workspaceData, err := yaml.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("marshal workspace metadata: %w", err)
+	}
+
+	workspacePath := filepath.Join(workspaceDir, "_workspace.yml")
+	if err := os.WriteFile(workspacePath, workspaceData, 0o644); err != nil {
+		return fmt.Errorf("write workspace metadata file: %w", err)
+	}
+
+	return nil
+}
+
+func validateWorkspaceName(name string) error {
+	name = strings.TrimSpace(name)
+	if strings.EqualFold(name, defaultWorkspaceName) {
+		return fmt.Errorf("'default' is a reserved workspace name. Please choose a different name.")
+	}
+
+	if name == "" || len(name) > maxWorkspaceNameLength {
+		return invalidWorkspaceNameError(name)
+	}
+
+	for _, ch := range name {
+		if !isWorkspaceNameCharAllowed(ch) {
+			return invalidWorkspaceNameError(name)
+		}
+	}
+
+	return nil
+}
+
+func invalidWorkspaceNameError(name string) error {
+	return fmt.Errorf(
+		"Workspace name '%s' is invalid. Use only letters, numbers, hyphens, and underscores (max 64 characters).",
+		name,
+	)
+}
+
+func isWorkspaceNameCharAllowed(ch rune) bool {
+	return ch >= 'a' && ch <= 'z' ||
+		ch >= 'A' && ch <= 'Z' ||
+		ch >= '0' && ch <= '9' ||
+		ch == '-' ||
+		ch == '_'
+}
+
+func setActiveWorkspace(configPath, workspaceName string) error {
+	workspaceName = strings.TrimSpace(workspaceName)
+	if workspaceName == "" {
+		return fmt.Errorf("workspace name cannot be empty")
+	}
+
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	cfg.ActiveWorkspace = workspaceName
+	if err := writeConfig(configPath, cfg); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 type config struct {
-	Connections []databaseConfig `json:"connections"`
+	Connections     []databaseConfig `json:"connections"`
+	ActiveWorkspace string           `json:"active_workspace,omitempty"`
 }
 
 type databaseConfig struct {
@@ -2331,7 +2535,16 @@ func readLine() string {
 
 func promptYesNo(label string) bool {
 	fmt.Printf("%s (y/n): ", label)
-	answer := strings.ToLower(readLine())
+	return isYesAnswer(readLine())
+}
+
+func promptYesNoDefaultNo(label string) bool {
+	fmt.Printf("%s (y/N): ", label)
+	return isYesAnswer(readLine())
+}
+
+func isYesAnswer(answer string) bool {
+	answer = strings.ToLower(strings.TrimSpace(answer))
 	return answer == "y" || answer == "yes"
 }
 

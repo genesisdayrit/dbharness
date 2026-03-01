@@ -102,8 +102,6 @@ dbh sync -s my-db
 Each stage prints progress and status. If a stage fails, dbh continues to the
 next stage and prints a summary at the end.
 
----
-
 ### Sub-commands
 
 The following commands can also be run individually for more control over each stage of the discovery workflow.
@@ -209,6 +207,31 @@ The command:
 
 `dbh columns` does not modify existing `__sample.xml` files.
 
+### `dbh workspace create`
+
+Scaffolds a named workspace under `.dbharness/context/workspaces/<name>/`:
+
+```bash
+# Provide a name flag
+dbh workspace create --name q1-revenue
+
+# Or run interactively (prompts for a workspace name)
+dbh workspace create
+```
+
+The command creates:
+
+```text
+.dbharness/context/workspaces/<name>/
+  logs/
+  MEMORY.md
+  _workspace.yml
+```
+
+When run without `--name`, dbh prompts whether to set the new workspace as active
+by writing `"active_workspace": "<name>"` to `.dbharness/config.json`.
+With `--name`, dbh skips this prompt and leaves the active workspace unchanged.
+
 ### `dbh test-connection`
 
 Tests a database connection defined in `.dbharness/config.json`:
@@ -261,6 +284,7 @@ The prompt shows the current default database (if one exists), includes an optio
 For deeper walkthroughs and architecture details, see:
 
 - [`docs/guides/init.md`](./docs/guides/init.md)
+- [`docs/guides/workspaces.md`](./docs/guides/workspaces.md)
 - [`docs/guides/connections.md`](./docs/guides/connections.md)
 - [`docs/guides/databases.md`](./docs/guides/databases.md)
 - [`docs/guides/schemas.md`](./docs/guides/schemas.md)

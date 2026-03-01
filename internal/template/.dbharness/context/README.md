@@ -37,6 +37,17 @@ context/
 6. Use the `description` fields (when populated) for additional context about what each schema or table contains.
 7. Append session-level notes to `workspaces/default/logs/YYYY-MM-DD.md` (or the active workspace).
 
+## Managing workspaces
+
+Create additional named workspaces with:
+
+```bash
+dbh workspace create --name <workspace-name>
+```
+
+When run without `--name`, dbh prompts whether to set that workspace as active in
+`.dbharness/config.json`. With `--name`, dbh skips this prompt.
+
 ## Generating context files
 
 ```bash

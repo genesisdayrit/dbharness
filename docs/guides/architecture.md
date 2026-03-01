@@ -1,6 +1,7 @@
 # Architecture
 
 This document describes the `.dbharness/context/` directory structure — what is currently implemented and the full future vision.
+For command-level workspace behavior, see [`workspaces.md`](./workspaces.md).
 For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
 
 ## Current Structure (implemented)
@@ -25,6 +26,8 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
                   <table_name>__sample.xml
     workspaces/
       default/
+        MEMORY.md
+        _workspace.yml
         logs/
           YYYY-MM-DD.md
 ```
@@ -36,7 +39,9 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
   - Stores durable, high-confidence facts (schema quirks, naming conventions, query preferences)
 - **Session memory (implemented):**
   - Workspace-level daily notes at `context/workspaces/<workspace>/logs/YYYY-MM-DD.md`
-  - `default` workspace is created during `dbh init`, so session logs always have a landing directory
+  - Workspace metadata is stored at `context/workspaces/<workspace>/_workspace.yml`
+  - Workspace memory is stored at `context/workspaces/<workspace>/MEMORY.md`
+  - `dbh workspace create` scaffolds additional named workspaces
 
 ### Levels
 
@@ -47,7 +52,7 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
 | Schema | `schemas/<name>/` | `_schemas.yml` | One directory per schema; index lists all schemas with table counts |
 | Table (index) | — | `_tables.yml` | Per-schema file listing all tables and views |
 | Table (detail) | `<table>/` | `__columns.yml`, `__sample.xml` | Per-table column metadata (basic via `dbh tables`, enriched via `dbh columns`) and sample data |
-| Workspace | `workspaces/<name>/` | `logs/YYYY-MM-DD.md` | Global workspaces for session-level notes; not scoped to a single connection |
+| Workspace | `workspaces/<name>/` | `_workspace.yml`, `MEMORY.md`, `logs/YYYY-MM-DD.md` | Global workspaces for session-level notes and workspace-scoped memory; not scoped to a single connection |
 
 ### Naming Conventions
 
@@ -78,23 +83,27 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
                   <table_name>__sample.xml
     workspaces/
       default/
+        MEMORY.md
+        _workspace.yml
         logs/
           YYYY-MM-DD.md
       <workspace-name>/
+        MEMORY.md
+        _workspace.yml
         logs/
           YYYY-MM-DD.md
 ```
 
 ### Planned Additions
 
-- **Workspace creation command**: `dbh create-workspace` / `dbh create-w` scaffolding for named workspaces.
-- **Active workspace selection**: config/env/flag support for selecting non-default workspace targets.
+- **Workspace list command**: list available workspaces and indicate the active one.
+- **Workspace set command**: switch active workspace without creating a new one.
 - **Session transcripts**: searchable per-session transcript files with descriptive slugs.
 - **Execution logs**: structured history of executed SQL and related metadata.
 - **Schema refresh**: Automated detection and refresh of changed schemas and tables.
 
 ### What's Not Yet Implemented
 
-- Named workspace creation commands and active workspace selection
+- Workspace list/set commands for active workspace management
 - Session transcript export and execution log capture
 - Automated schema change detection and refresh
