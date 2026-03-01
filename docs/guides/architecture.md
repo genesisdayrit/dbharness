@@ -1,6 +1,7 @@
 # Architecture
 
 This document describes the `.dbharness/context/` directory structure — what is currently implemented and the full future vision.
+For command-level workspace behavior, see [`workspaces.md`](./workspaces.md).
 For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
 
 ## Current Structure (implemented)

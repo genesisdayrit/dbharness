@@ -288,6 +288,7 @@ The prompt shows the current default database (if one exists), includes an optio
 For deeper walkthroughs and architecture details, see:
 
 - [`docs/guides/init.md`](./docs/guides/init.md)
+- [`docs/guides/workspaces.md`](./docs/guides/workspaces.md)
 - [`docs/guides/connections.md`](./docs/guides/connections.md)
 - [`docs/guides/databases.md`](./docs/guides/databases.md)
 - [`docs/guides/schemas.md`](./docs/guides/schemas.md)
