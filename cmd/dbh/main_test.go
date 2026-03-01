@@ -1042,6 +1042,31 @@ func TestListWorkspacesIgnoresFiles(t *testing.T) {
 	}
 }
 
+func TestListWorkspacesFiltersMixedContents(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	workspacesDir := filepath.Join(baseDir, "context", "workspaces")
+	for _, name := range []string{"default", "staging"} {
+		if err := os.MkdirAll(filepath.Join(workspacesDir, name), 0o755); err != nil {
+			t.Fatalf("mkdir workspace %q: %v", name, err)
+		}
+	}
+	for _, name := range []string{"notes.txt", ".gitkeep"} {
+		if err := os.WriteFile(filepath.Join(workspacesDir, name), []byte("data"), 0o644); err != nil {
+			t.Fatalf("write file %q: %v", name, err)
+		}
+	}
+
+	got, err := listWorkspaces(baseDir)
+	if err != nil {
+		t.Fatalf("listWorkspaces(...) error = %v", err)
+	}
+
+	want := []string{"default", "staging"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("listWorkspaces(...) = %#v, want %#v", got, want)
+	}
+}
+
 func TestListWorkspacesErrorWhenNoWorkspacesDir(t *testing.T) {
 	baseDir := filepath.Join(t.TempDir(), ".dbharness")
 	if err := os.MkdirAll(baseDir, 0o755); err != nil {

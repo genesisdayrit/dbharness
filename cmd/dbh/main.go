@@ -726,7 +726,7 @@ func runSetDefaultConnection() {
 	fmt.Printf("Primary default connection switched from %q to %q in %s\n", previousPrimary, selected, absConfigPath)
 }
 
-const keepCurrentDefaultWorkspaceValue = "__keep_current_workspace__"
+const keepCurrentWorkspaceSelectionValue = "__keep_current_workspace__"
 
 func runSetDefaultWorkspace() {
 	baseDir := filepath.Join(".", ".dbharness")
@@ -757,11 +757,13 @@ func runSetDefaultWorkspace() {
 
 	if len(workspaces) == 1 {
 		only := workspaces[0]
-		if currentActive == only {
-			fmt.Printf("Only one workspace exists. %q is already the active workspace.\n", only)
-		} else {
-			fmt.Printf("Only one workspace exists. %q is already the active workspace.\n", only)
+		if currentActive != only {
+			if err := setActiveWorkspace(configPath, only); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		}
+		fmt.Printf("Only one workspace exists. %q is already the active workspace.\n", only)
 		fmt.Println("Tip: Create a new workspace with: dbh workspace create")
 		return
 	}
@@ -775,7 +777,7 @@ func runSetDefaultWorkspace() {
 	options := make([]huh.Option[string], 0, len(workspaces)+1)
 	if currentActive != "" {
 		label := fmt.Sprintf("Keep current (%s)", currentActive)
-		options = append(options, huh.NewOption(label, keepCurrentDefaultWorkspaceValue))
+		options = append(options, huh.NewOption(label, keepCurrentWorkspaceSelectionValue))
 	}
 	for _, ws := range workspaces {
 		options = append(options, huh.NewOption(ws, ws))
@@ -797,7 +799,7 @@ func runSetDefaultWorkspace() {
 		os.Exit(1)
 	}
 
-	if selected == keepCurrentDefaultWorkspaceValue {
+	if selected == keepCurrentWorkspaceSelectionValue {
 		fmt.Println("Keeping existing active workspace.")
 		return
 	}
