@@ -279,6 +279,20 @@ The prompt shows the current default database (if one exists), includes an optio
 - `.dbharness/config.json` (connection `database` field)
 - `.dbharness/context/connections/<primary-connection>/databases/_databases.yml` (`default_database`)
 
+### `dbh set-default -w`
+
+Interactively selects a workspace and sets it as the active workspace in `.dbharness/config.json`:
+
+```bash
+dbh set-default -w
+```
+
+The workspace list is sourced from top-level directory names under `.dbharness/context/workspaces/`. The selected value is written to the `active_workspace` field in `config.json`.
+
+- If only one workspace exists, the command prints a message and exits without showing a menu.
+- If the selected workspace is already active, no write occurs.
+- A "Keep current" option is shown when an active workspace is already configured.
+
 ## Guides
 
 For deeper walkthroughs and architecture details, see:

@@ -116,6 +116,40 @@ Session notes, decisions, and context specific to this workspace.
 Written and maintained automatically by coding agents following the criteria in AGENTS.md.
 ```
 
+## Set active workspace
+
+Command:
+
+```bash
+dbh set-default -w
+```
+
+Interactively selects a workspace and sets it as the active workspace in `.dbharness/config.json`. The workspace list is sourced from top-level directory names under `.dbharness/context/workspaces/`.
+
+### Behavior
+
+| Scenario | Behavior |
+|---|---|
+| Multiple workspaces exist | Shows interactive menu with all workspaces; includes "Keep current" option if an active workspace is already set |
+| Only one workspace exists | Prints message and tip to create more; exits without showing a menu |
+| Selected workspace is already active | No write to `config.json`; prints confirmation |
+| No active workspace in config | Menu shown without "Keep current" option; success message says "set to" instead of "switched from" |
+
+### Output examples
+
+```text
+Current active workspace: "default"
+```
+
+```text
+Active workspace switched from "default" to "q1-revenue" in /path/to/.dbharness/config.json
+```
+
+```text
+Only one workspace exists. "default" is already the active workspace.
+Tip: Create a new workspace with: dbh workspace create
+```
+
 ## Error messages
 
 | Scenario | Message |
@@ -124,16 +158,17 @@ Written and maintained automatically by coding agents following the criteria in 
 | Duplicate workspace | `Workspace '<name>' already exists at .dbharness/context/workspaces/<name>/.` |
 | Reserved workspace | `'default' is a reserved workspace name. Please choose a different name.` |
 | Invalid characters/length | `Workspace name '<name>' is invalid. Use only letters, numbers, hyphens, and underscores (max 64 characters).` |
+| No workspaces directory | `No workspaces directory found. Run 'dbh init' to set up the default workspace.` |
 
 ## Current scope
 
 Implemented now:
 
 - `dbh workspace create [--name <name>]`
+- `dbh set-default -w` (interactive active workspace selection)
 - Workspace scaffolding (`logs/`, `MEMORY.md`, `_workspace.yml`)
 - Optional active workspace update in interactive flow
 
 Not yet implemented:
 
 - `dbh workspace list`
-- `dbh workspace set <name>`

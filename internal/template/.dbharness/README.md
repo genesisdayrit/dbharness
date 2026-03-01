@@ -45,3 +45,4 @@ Discovery commands accept `-s <name>` to target a specific connection (defaults 
 | `dbh ls -c` | List configured connections |
 | `dbh set-default -c` | Set primary connection |
 | `dbh set-default -d` | Set default database |
+| `dbh set-default -w` | Set active workspace |

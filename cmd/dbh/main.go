@@ -79,6 +79,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  dbh ls -c")
 	fmt.Fprintln(os.Stderr, "  dbh set-default -c")
 	fmt.Fprintln(os.Stderr, "  dbh set-default -d")
+	fmt.Fprintln(os.Stderr, "  dbh set-default -w")
 	fmt.Fprintln(os.Stderr, "  dbh sync [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh databases [-s name]")
 	fmt.Fprintln(os.Stderr, "  dbh schemas [-s name]")
@@ -635,6 +636,8 @@ func runSetDefault(args []string) {
 	longConnections := flags.Bool("connections", false, "Select and set the primary connection.")
 	shortDatabase := flags.Bool("d", false, "Select and set the default database for the primary connection using _databases.yml.")
 	longDatabase := flags.Bool("database", false, "Select and set the default database for the primary connection using _databases.yml.")
+	shortWorkspace := flags.Bool("w", false, "Select and set the active workspace.")
+	longWorkspace := flags.Bool("workspace", false, "Select and set the active workspace.")
 	_ = flags.Parse(args)
 
 	if flags.NArg() > 0 {
@@ -644,14 +647,31 @@ func runSetDefault(args []string) {
 
 	setConnections := *shortConnections || *longConnections
 	setDatabase := *shortDatabase || *longDatabase
+	setWorkspace := *shortWorkspace || *longWorkspace
 
-	if setConnections == setDatabase {
-		fmt.Fprintln(os.Stderr, "set-default requires exactly one of -c/--connections or -d/--database")
+	selected := 0
+	if setConnections {
+		selected++
+	}
+	if setDatabase {
+		selected++
+	}
+	if setWorkspace {
+		selected++
+	}
+
+	if selected != 1 {
+		fmt.Fprintln(os.Stderr, "set-default requires exactly one of -c/--connections, -d/--database, or -w/--workspace")
 		os.Exit(2)
 	}
 
 	if setConnections {
 		runSetDefaultConnection()
+		return
+	}
+
+	if setWorkspace {
+		runSetDefaultWorkspace()
 		return
 	}
 
@@ -704,6 +724,132 @@ func runSetDefaultConnection() {
 	}
 
 	fmt.Printf("Primary default connection switched from %q to %q in %s\n", previousPrimary, selected, absConfigPath)
+}
+
+const keepCurrentWorkspaceSelectionValue = "__keep_current_workspace__"
+
+func runSetDefaultWorkspace() {
+	baseDir := filepath.Join(".", ".dbharness")
+	info, err := os.Stat(baseDir)
+	if errors.Is(err, os.ErrNotExist) || (err == nil && !info.IsDir()) {
+		fmt.Fprintln(os.Stderr, "No .dbharness directory found. Run 'dbh init' first.")
+		os.Exit(1)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "check .dbharness directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	workspaces, err := listWorkspaces(baseDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	configPath := filepath.Join(baseDir, "config.json")
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	currentActive := strings.TrimSpace(cfg.ActiveWorkspace)
+
+	if len(workspaces) == 1 {
+		only := workspaces[0]
+		if currentActive != only {
+			if err := setActiveWorkspace(configPath, only); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
+		fmt.Printf("Only one workspace exists. %q is already the active workspace.\n", only)
+		fmt.Println("Tip: Create a new workspace with: dbh workspace create")
+		return
+	}
+
+	if currentActive == "" {
+		fmt.Println("No active workspace is currently configured.")
+	} else {
+		fmt.Printf("Current active workspace: %q\n", currentActive)
+	}
+
+	options := make([]huh.Option[string], 0, len(workspaces)+1)
+	if currentActive != "" {
+		label := fmt.Sprintf("Keep current (%s)", currentActive)
+		options = append(options, huh.NewOption(label, keepCurrentWorkspaceSelectionValue))
+	}
+	for _, ws := range workspaces {
+		options = append(options, huh.NewOption(ws, ws))
+	}
+
+	var selected string
+	if err := huh.NewSelect[string]().
+		Title("Select an active workspace").
+		Options(options...).
+		Value(&selected).
+		Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "select workspace: %v\n", err)
+		os.Exit(1)
+	}
+
+	selected = strings.TrimSpace(selected)
+	if selected == "" {
+		fmt.Fprintln(os.Stderr, "no workspace selected")
+		os.Exit(1)
+	}
+
+	if selected == keepCurrentWorkspaceSelectionValue {
+		fmt.Println("Keeping existing active workspace.")
+		return
+	}
+
+	if selected == currentActive {
+		fmt.Printf("Workspace %q is already the active workspace.\n", selected)
+		return
+	}
+
+	if err := setActiveWorkspace(configPath, selected); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	absConfigPath, _ := filepath.Abs(configPath)
+	if currentActive == "" {
+		fmt.Printf("Active workspace set to %q in %s\n", selected, absConfigPath)
+	} else {
+		fmt.Printf("Active workspace switched from %q to %q in %s\n", currentActive, selected, absConfigPath)
+	}
+}
+
+func listWorkspaces(baseDir string) ([]string, error) {
+	workspacesDir := filepath.Join(baseDir, "context", "workspaces")
+	info, err := os.Stat(workspacesDir)
+	if errors.Is(err, os.ErrNotExist) || (err == nil && !info.IsDir()) {
+		return nil, fmt.Errorf("No workspaces directory found. Run 'dbh init' to set up the default workspace.")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("check workspaces directory: %w", err)
+	}
+
+	entries, err := os.ReadDir(workspacesDir)
+	if err != nil {
+		return nil, fmt.Errorf("read workspaces directory: %w", err)
+	}
+
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			names = append(names, entry.Name())
+		}
+	}
+
+	if len(names) == 0 {
+		return nil, fmt.Errorf("No workspaces directory found. Run 'dbh init' to set up the default workspace.")
+	}
+
+	sort.Strings(names)
+	return names, nil
 }
 
 const keepCurrentDefaultSelectionValue = "__keep_current_default_database__"
