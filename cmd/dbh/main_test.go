@@ -1001,6 +1001,103 @@ func TestRunSyncStagesContinuesAfterFailure(t *testing.T) {
 	}
 }
 
+func TestListWorkspacesReturnsAlphabeticallySortedNames(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	workspacesDir := filepath.Join(baseDir, "context", "workspaces")
+	for _, name := range []string{"q1-revenue", "default", "analytics"} {
+		if err := os.MkdirAll(filepath.Join(workspacesDir, name), 0o755); err != nil {
+			t.Fatalf("mkdir workspace %q: %v", name, err)
+		}
+	}
+
+	got, err := listWorkspaces(baseDir)
+	if err != nil {
+		t.Fatalf("listWorkspaces(...) error = %v", err)
+	}
+
+	want := []string{"analytics", "default", "q1-revenue"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("listWorkspaces(...) = %#v, want %#v", got, want)
+	}
+}
+
+func TestListWorkspacesIgnoresFiles(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	workspacesDir := filepath.Join(baseDir, "context", "workspaces")
+	if err := os.MkdirAll(filepath.Join(workspacesDir, "default"), 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspacesDir, "readme.txt"), []byte("ignore me"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	got, err := listWorkspaces(baseDir)
+	if err != nil {
+		t.Fatalf("listWorkspaces(...) error = %v", err)
+	}
+
+	want := []string{"default"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("listWorkspaces(...) = %#v, want %#v", got, want)
+	}
+}
+
+func TestListWorkspacesErrorWhenNoWorkspacesDir(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatalf("mkdir .dbharness: %v", err)
+	}
+
+	_, err := listWorkspaces(baseDir)
+	if err == nil {
+		t.Fatalf("listWorkspaces(...) error = nil, want non-nil")
+	}
+
+	const want = "No workspaces directory found. Run 'dbh init' to set up the default workspace."
+	if err.Error() != want {
+		t.Fatalf("listWorkspaces(...) error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestListWorkspacesErrorWhenWorkspacesDirEmpty(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	workspacesDir := filepath.Join(baseDir, "context", "workspaces")
+	if err := os.MkdirAll(workspacesDir, 0o755); err != nil {
+		t.Fatalf("mkdir workspaces dir: %v", err)
+	}
+
+	_, err := listWorkspaces(baseDir)
+	if err == nil {
+		t.Fatalf("listWorkspaces(...) error = nil, want non-nil")
+	}
+
+	const want = "No workspaces directory found. Run 'dbh init' to set up the default workspace."
+	if err.Error() != want {
+		t.Fatalf("listWorkspaces(...) error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestListWorkspacesErrorWhenOnlyFilesExist(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	workspacesDir := filepath.Join(baseDir, "context", "workspaces")
+	if err := os.MkdirAll(workspacesDir, 0o755); err != nil {
+		t.Fatalf("mkdir workspaces dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspacesDir, "not-a-workspace.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	_, err := listWorkspaces(baseDir)
+	if err == nil {
+		t.Fatalf("listWorkspaces(...) error = nil, want non-nil")
+	}
+
+	const want = "No workspaces directory found. Run 'dbh init' to set up the default workspace."
+	if err.Error() != want {
+		t.Fatalf("listWorkspaces(...) error = %q, want %q", err.Error(), want)
+	}
+}
+
 func TestPrintSyncSummary(t *testing.T) {
 	results := []syncStageResult{
 		{StageName: "databases", Duration: 250 * time.Millisecond},
