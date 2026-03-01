@@ -125,8 +125,9 @@ The command creates:
   _workspace.yml
 ```
 
-After creation, dbh prompts whether to set the new workspace as active by writing
-`"active_workspace": "<name>"` to `.dbharness/config.json`.
+When run without `--name`, dbh prompts whether to set the new workspace as active
+by writing `"active_workspace": "<name>"` to `.dbharness/config.json`.
+With `--name`, dbh skips this prompt and leaves the active workspace unchanged.
 
 ---
 

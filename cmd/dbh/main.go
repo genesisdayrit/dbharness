@@ -318,7 +318,8 @@ func runWorkspaceCreate(args []string) {
 		os.Exit(2)
 	}
 
-	workspaceName := strings.TrimSpace(*name)
+	rawName := *name
+	workspaceName := strings.TrimSpace(rawName)
 	if workspaceName == "" {
 		workspaceName = promptWorkspaceName()
 	}
@@ -335,7 +336,12 @@ func runWorkspaceCreate(args []string) {
 	fmt.Println("  - _workspace.yml")
 	fmt.Println()
 
-	if promptYesNo(fmt.Sprintf("Set %q as your active workspace?", workspaceName)) {
+	if !shouldPromptForWorkspaceActivation(rawName) {
+		fmt.Println("Active workspace unchanged. Run 'dbh workspace set <name>' to activate later.")
+		return
+	}
+
+	if promptYesNoDefaultNo(fmt.Sprintf("Set %q as your active workspace?", workspaceName)) {
 		configPath := filepath.Join(baseDir, "config.json")
 		if err := setActiveWorkspace(configPath, workspaceName); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -346,6 +352,10 @@ func runWorkspaceCreate(args []string) {
 	}
 
 	fmt.Println("Active workspace unchanged. Run 'dbh workspace set <name>' to activate later.")
+}
+
+func shouldPromptForWorkspaceActivation(rawName string) bool {
+	return strings.TrimSpace(rawName) == ""
 }
 
 func promptWorkspaceName() string {
@@ -2525,7 +2535,16 @@ func readLine() string {
 
 func promptYesNo(label string) bool {
 	fmt.Printf("%s (y/n): ", label)
-	answer := strings.ToLower(readLine())
+	return isYesAnswer(readLine())
+}
+
+func promptYesNoDefaultNo(label string) bool {
+	fmt.Printf("%s (y/N): ", label)
+	return isYesAnswer(readLine())
+}
+
+func isYesAnswer(answer string) bool {
+	answer = strings.ToLower(strings.TrimSpace(answer))
 	return answer == "y" || answer == "yes"
 }
 

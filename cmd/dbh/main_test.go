@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"os"
@@ -306,6 +307,76 @@ func TestSetActiveWorkspaceWritesConfig(t *testing.T) {
 	}
 	if len(cfg.Connections) != 0 {
 		t.Fatalf("connections should remain empty, got %d entries", len(cfg.Connections))
+	}
+}
+
+func TestShouldPromptForWorkspaceActivation(t *testing.T) {
+	tests := []struct {
+		name    string
+		rawName string
+		want    bool
+	}{
+		{
+			name:    "interactive when no name provided",
+			rawName: "",
+			want:    true,
+		},
+		{
+			name:    "interactive when name is only whitespace",
+			rawName: "   ",
+			want:    true,
+		},
+		{
+			name:    "skip prompt when name flag provided",
+			rawName: "q1-revenue",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldPromptForWorkspaceActivation(tt.rawName); got != tt.want {
+				t.Fatalf("shouldPromptForWorkspaceActivation(%q) = %v, want %v", tt.rawName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPromptYesNoDefaultNo(t *testing.T) {
+	originalReader := stdinReader
+	defer func() {
+		stdinReader = originalReader
+	}()
+
+	stdinReader = bufio.NewReader(strings.NewReader("\n"))
+	if promptYesNoDefaultNo("Set active workspace?") {
+		t.Fatalf("promptYesNoDefaultNo(...) = true for empty response, want false")
+	}
+
+	stdinReader = bufio.NewReader(strings.NewReader("yes\n"))
+	if !promptYesNoDefaultNo("Set active workspace?") {
+		t.Fatalf("promptYesNoDefaultNo(...) = false for yes response, want true")
+	}
+}
+
+func TestIsYesAnswer(t *testing.T) {
+	tests := []struct {
+		answer string
+		want   bool
+	}{
+		{answer: "", want: false},
+		{answer: "n", want: false},
+		{answer: "no", want: false},
+		{answer: "y", want: true},
+		{answer: "yes", want: true},
+		{answer: " YES ", want: true},
+	}
+
+	for _, tt := range tests {
+		got := isYesAnswer(tt.answer)
+		if got != tt.want {
+			t.Fatalf("isYesAnswer(%q) = %v, want %v", tt.answer, got, tt.want)
+		}
 	}
 }
 

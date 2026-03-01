@@ -45,7 +45,8 @@ Create additional named workspaces with:
 dbh workspace create --name <workspace-name>
 ```
 
-After creation, dbh prompts whether to set that workspace as active in `.dbharness/config.json`.
+When run without `--name`, dbh prompts whether to set that workspace as active in
+`.dbharness/config.json`. With `--name`, dbh skips this prompt.
 
 ## Generating context files
 
