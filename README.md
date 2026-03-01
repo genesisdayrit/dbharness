@@ -102,6 +102,8 @@ dbh sync -s my-db
 Each stage prints progress and status. If a stage fails, dbh continues to the
 next stage and prints a summary at the end.
 
+---
+
 ### Sub-commands
 
 The following commands can also be run individually for more control over each stage of the discovery workflow.
@@ -184,6 +186,65 @@ The command:
 - writes `<table>__columns.yml` and `<table>__sample.xml` files under table directories
 - overwrites existing table detail files with fresh data when re-run
 
+This extends the directory structure created by `dbh schemas`:
+
+```
+.dbharness/context/connections/my-db/databases/
+  myapp/
+    schemas/
+      public/
+        _tables.yml
+        users/
+          users__columns.yml        # Column definitions
+          users__sample.xml         # Sample rows
+        orders/
+          orders__columns.yml
+          orders__sample.xml
+```
+
+Example `users__columns.yml`:
+
+```yaml
+schema: public
+table: users
+connection: my-db
+database: myapp
+database_type: postgres
+generated_at: "2026-02-22T15:30:45Z"
+columns:
+- name: id
+  data_type: integer
+  is_nullable: "NO"
+  ordinal_position: 1
+  column_default: nextval('users_id_seq'::regclass)
+- name: name
+  data_type: character varying
+  is_nullable: "YES"
+  ordinal_position: 2
+- name: email
+  data_type: character varying
+  is_nullable: "NO"
+  ordinal_position: 3
+```
+
+Example `users__sample.xml`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<table_sample schema="public" table="users" connection="my-db" database="myapp" row_count="2" generated_at="2026-02-22T15:30:45Z">
+  <row>
+    <field name="id">1</field>
+    <field name="name">Alice</field>
+    <field name="email">alice@example.com</field>
+  </row>
+  <row>
+    <field name="id">2</field>
+    <field name="name">Bob</field>
+    <field name="email">bob@example.com</field>
+  </row>
+</table_sample>
+```
+
 For full workflow details and examples, see [`docs/guides/tables.md`](./docs/guides/tables.md).
 
 ### `dbh columns`
@@ -206,6 +267,89 @@ The command:
 - writes one enriched `<table>__columns.yml` file per selected table
 
 `dbh columns` does not modify existing `__sample.xml` files.
+
+Example enriched `orders__columns.yml`:
+
+```yaml
+schema: public
+table: orders
+connection: my-db
+database: myapp
+database_type: postgres
+generated_at: "2026-02-22T15:30:45Z"
+columns:
+- name: id
+  data_type: integer
+  is_nullable: "NO"
+  ordinal_position: 1
+  column_default: nextval('orders_id_seq'::regclass)
+  ai_description: ""
+  db_description: "Primary key"
+  total_rows: 48500
+  null_count: 0
+  non_null_count: 48500
+  distinct_non_null_count: 48500
+  distinct_of_non_null_pct: 100
+  null_of_total_rows_pct: 0
+  non_null_of_total_rows_pct: 100
+  sample_values:
+  - "10041"
+  - "10042"
+  - "10043"
+- name: status
+  data_type: character varying
+  is_nullable: "NO"
+  ordinal_position: 2
+  ai_description: ""
+  db_description: ""
+  total_rows: 48500
+  null_count: 0
+  non_null_count: 48500
+  distinct_non_null_count: 5
+  distinct_of_non_null_pct: 0.01
+  null_of_total_rows_pct: 0
+  non_null_of_total_rows_pct: 100
+  sample_values:
+  - pending
+  - shipped
+  - delivered
+  - cancelled
+  - refunded
+- name: discount_code
+  data_type: character varying
+  is_nullable: "YES"
+  ordinal_position: 3
+  ai_description: ""
+  db_description: ""
+  total_rows: 48500
+  null_count: 31025
+  non_null_count: 17475
+  distinct_non_null_count: 42
+  distinct_of_non_null_pct: 0.24
+  null_of_total_rows_pct: 63.97
+  non_null_of_total_rows_pct: 36.03
+  sample_values:
+  - SUMMER20
+  - WELCOME10
+  - LOYALTY15
+- name: total_cents
+  data_type: bigint
+  is_nullable: "NO"
+  ordinal_position: 4
+  ai_description: ""
+  db_description: "Order total in cents"
+  total_rows: 48500
+  null_count: 0
+  non_null_count: 48500
+  distinct_non_null_count: 8923
+  distinct_of_non_null_pct: 18.4
+  null_of_total_rows_pct: 0
+  non_null_of_total_rows_pct: 100
+  sample_values:
+  - "2999"
+  - "5490"
+  - "14999"
+```
 
 ### `dbh workspace create`
 
