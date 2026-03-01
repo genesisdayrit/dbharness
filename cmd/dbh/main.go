@@ -261,6 +261,12 @@ func runInit(args []string) {
 	targetDir := filepath.Join(".", ".dbharness")
 
 	if info, err := os.Stat(targetDir); err == nil && info.IsDir() && !*force {
+		configPath := filepath.Join(targetDir, "config.json")
+		if err := ensureActiveWorkspace(configPath); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
 		absPath, _ := filepath.Abs(targetDir)
 		fmt.Printf(".dbharness already exists at %s\n", absPath)
 		fmt.Println()
@@ -455,6 +461,18 @@ func isWorkspaceNameCharAllowed(ch rune) bool {
 		ch >= '0' && ch <= '9' ||
 		ch == '-' ||
 		ch == '_'
+}
+
+func ensureActiveWorkspace(configPath string) error {
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(cfg.ActiveWorkspace) != "" {
+		return nil
+	}
+	cfg.ActiveWorkspace = defaultWorkspaceName
+	return writeConfig(configPath, cfg)
 }
 
 func setActiveWorkspace(configPath, workspaceName string) error {
