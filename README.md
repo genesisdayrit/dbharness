@@ -104,6 +104,32 @@ next stage and prints a summary at the end.
 
 ---
 
+### `dbh workspace create`
+
+Scaffolds a named workspace under `.dbharness/context/workspaces/<name>/`:
+
+```bash
+# Provide a name flag
+dbh workspace create --name q1-revenue
+
+# Or run interactively (prompts for a workspace name)
+dbh workspace create
+```
+
+The command creates:
+
+```text
+.dbharness/context/workspaces/<name>/
+  logs/
+  MEMORY.md
+  _workspace.yml
+```
+
+After creation, dbh prompts whether to set the new workspace as active by writing
+`"active_workspace": "<name>"` to `.dbharness/config.json`.
+
+---
+
 ### Sub-commands
 
 The following commands can also be run individually for more control over each stage of the discovery workflow.

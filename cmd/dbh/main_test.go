@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestInstallTemplateForceCreatesFullSnapshot(t *testing.T) {
@@ -148,6 +150,163 @@ func TestEnsureConnectionMemoryFileDoesNotOverwriteExistingFile(t *testing.T) {
 	}
 
 	assertFileContent(t, memoryPath, customContent)
+}
+
+func TestValidateWorkspaceName(t *testing.T) {
+	tests := []struct {
+		name        string
+		workspace   string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:      "valid hyphenated name",
+			workspace: "q1-revenue",
+			wantErr:   false,
+		},
+		{
+			name:      "valid underscored name",
+			workspace: "team_42",
+			wantErr:   false,
+		},
+		{
+			name:        "reserved default",
+			workspace:   "default",
+			wantErr:     true,
+			errContains: "reserved workspace name",
+		},
+		{
+			name:        "rejects spaces",
+			workspace:   "q1 revenue",
+			wantErr:     true,
+			errContains: "is invalid",
+		},
+		{
+			name:        "rejects special characters",
+			workspace:   "q1@revenue",
+			wantErr:     true,
+			errContains: "is invalid",
+		},
+		{
+			name:        "rejects too long",
+			workspace:   strings.Repeat("a", maxWorkspaceNameLength+1),
+			wantErr:     true,
+			errContains: "is invalid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateWorkspaceName(tt.workspace)
+			if tt.wantErr && err == nil {
+				t.Fatalf("validateWorkspaceName(%q) error = nil, want non-nil", tt.workspace)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("validateWorkspaceName(%q) error = %v, want nil", tt.workspace, err)
+			}
+			if tt.wantErr && tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+				t.Fatalf("validateWorkspaceName(%q) error = %q, want substring %q", tt.workspace, err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestCreateNamedWorkspaceScaffoldsExpectedFiles(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatalf("mkdir .dbharness: %v", err)
+	}
+
+	workspaceName := "q1-revenue"
+	if err := createNamedWorkspace(baseDir, workspaceName); err != nil {
+		t.Fatalf("createNamedWorkspace(...) error = %v", err)
+	}
+
+	workspaceDir := filepath.Join(baseDir, "context", "workspaces", workspaceName)
+	assertDirectoryEmpty(t, filepath.Join(workspaceDir, "logs"))
+	assertFileContent(
+		t,
+		filepath.Join(workspaceDir, "MEMORY.md"),
+		"# Workspace Memory — q1-revenue\n\nSession notes, decisions, and context specific to this workspace.\nWritten and maintained automatically by coding agents following the criteria in AGENTS.md.\n",
+	)
+
+	workspaceMetaPath := filepath.Join(workspaceDir, "_workspace.yml")
+	workspaceMetaData, err := os.ReadFile(workspaceMetaPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", workspaceMetaPath, err)
+	}
+
+	var meta workspaceMetadata
+	if err := yaml.Unmarshal(workspaceMetaData, &meta); err != nil {
+		t.Fatalf("unmarshal _workspace.yml: %v", err)
+	}
+
+	if meta.Name != workspaceName {
+		t.Fatalf("workspace metadata name = %q, want %q", meta.Name, workspaceName)
+	}
+	if meta.Description != "" {
+		t.Fatalf("workspace metadata description = %q, want empty", meta.Description)
+	}
+	if _, err := time.Parse(time.RFC3339, meta.CreatedAt); err != nil {
+		t.Fatalf("workspace metadata created_at = %q, want RFC3339 timestamp (%v)", meta.CreatedAt, err)
+	}
+}
+
+func TestCreateNamedWorkspaceRequiresDbHarnessDirectory(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	err := createNamedWorkspace(baseDir, "marketing")
+	if err == nil {
+		t.Fatalf("createNamedWorkspace(...) error = nil, want non-nil")
+	}
+
+	const want = "No .dbharness directory found. Run 'dbh init' first."
+	if err.Error() != want {
+		t.Fatalf("createNamedWorkspace(...) error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestCreateNamedWorkspaceRejectsDuplicate(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".dbharness")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatalf("mkdir .dbharness: %v", err)
+	}
+
+	if err := createNamedWorkspace(baseDir, "marketing"); err != nil {
+		t.Fatalf("first createNamedWorkspace(...) error = %v", err)
+	}
+
+	err := createNamedWorkspace(baseDir, "marketing")
+	if err == nil {
+		t.Fatalf("second createNamedWorkspace(...) error = nil, want non-nil")
+	}
+
+	const want = "Workspace 'marketing' already exists at .dbharness/context/workspaces/marketing/."
+	if err.Error() != want {
+		t.Fatalf("second createNamedWorkspace(...) error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestSetActiveWorkspaceWritesConfig(t *testing.T) {
+	baseDir := t.TempDir()
+	configPath := filepath.Join(baseDir, "config.json")
+	if err := os.WriteFile(configPath, []byte("{\"connections\":[]}\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := setActiveWorkspace(configPath, "marketing"); err != nil {
+		t.Fatalf("setActiveWorkspace(...) error = %v", err)
+	}
+
+	cfg, err := readConfig(configPath)
+	if err != nil {
+		t.Fatalf("readConfig(...) error = %v", err)
+	}
+	if cfg.ActiveWorkspace != "marketing" {
+		t.Fatalf("config active_workspace = %q, want %q", cfg.ActiveWorkspace, "marketing")
+	}
+	if len(cfg.Connections) != 0 {
+		t.Fatalf("connections should remain empty, got %d entries", len(cfg.Connections))
+	}
 }
 
 func assertFileContent(t *testing.T, path, expected string) {

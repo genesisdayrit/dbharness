@@ -35,6 +35,7 @@ Discovery commands accept `-s <name>` to target a specific connection (defaults 
 | Command | Description |
 |---|---|
 | `dbh init` | Set up `.dbharness/` and configure connections |
+| `dbh workspace create [--name]` | Create a named workspace under `context/workspaces/` |
 | `dbh sync [-s]` | Run full discovery workflow (databases → schemas → tables) |
 | `dbh databases [-s]` | Discover accessible databases |
 | `dbh schemas [-s]` | Generate schema-level context files |
