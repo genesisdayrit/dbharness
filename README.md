@@ -367,7 +367,7 @@ The command creates:
 
 ```text
 .dbharness/context/workspaces/<name>/
-  logs/
+  diary/
   MEMORY.md
   _workspace.yml
 ```

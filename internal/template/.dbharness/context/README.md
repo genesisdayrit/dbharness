@@ -23,7 +23,7 @@ context/
               _tables.yml                # All tables and views in this schema
   workspaces/
     default/
-      logs/
+      diary/
         YYYY-MM-DD.md                  # Session notes (daily)
 ```
 
@@ -35,7 +35,7 @@ context/
 4. Navigate into `<database>/schemas/_schemas.yml` to see which schemas exist and how many tables each contains.
 5. Navigate into `<schema>/_tables.yml` for detailed table listings.
 6. Use the `description` fields (when populated) for additional context about what each schema or table contains.
-7. Append session-level notes to `workspaces/default/logs/YYYY-MM-DD.md` (or the active workspace).
+7. Append session-level notes to `workspaces/default/diary/YYYY-MM-DD.md` (or the active workspace).
 
 ## Managing workspaces
 

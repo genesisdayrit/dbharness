@@ -24,7 +24,7 @@ Database context for LLM agents and developers. Installed by the `dbh` CLI, this
                   <table>__sample.xml   # Sample rows (up to 10)
     workspaces/
       default/
-        logs/
+        diary/
           YYYY-MM-DD.md             # Session notes (default workspace)
 ```
 

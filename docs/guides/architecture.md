@@ -28,7 +28,7 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
       default/
         MEMORY.md
         _workspace.yml
-        logs/
+        diary/
           YYYY-MM-DD.md
 ```
 
@@ -38,7 +38,7 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
   - Connection-level Markdown file at `context/connections/<name>/MEMORY.md`
   - Stores durable, high-confidence facts (schema quirks, naming conventions, query preferences)
 - **Session memory (implemented):**
-  - Workspace-level daily notes at `context/workspaces/<workspace>/logs/YYYY-MM-DD.md`
+  - Workspace-level daily notes at `context/workspaces/<workspace>/diary/YYYY-MM-DD.md`
   - Workspace metadata is stored at `context/workspaces/<workspace>/_workspace.yml`
   - Workspace memory is stored at `context/workspaces/<workspace>/MEMORY.md`
   - `dbh workspace create` scaffolds additional named workspaces
@@ -52,7 +52,7 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
 | Schema | `schemas/<name>/` | `_schemas.yml` | One directory per schema; index lists all schemas with table counts |
 | Table (index) | — | `_tables.yml` | Per-schema file listing all tables and views |
 | Table (detail) | `<table>/` | `__columns.yml`, `__sample.xml` | Per-table column metadata (basic via `dbh tables`, enriched via `dbh columns`) and sample data |
-| Workspace | `workspaces/<name>/` | `_workspace.yml`, `MEMORY.md`, `logs/YYYY-MM-DD.md` | Global workspaces for session-level notes and workspace-scoped memory; not scoped to a single connection |
+| Workspace | `workspaces/<name>/` | `_workspace.yml`, `MEMORY.md`, `diary/YYYY-MM-DD.md` | Global workspaces for session-level notes and workspace-scoped memory; not scoped to a single connection |
 
 ### Naming Conventions
 
@@ -85,12 +85,12 @@ For coding-agent navigation guidance, see `.dbharness/AGENTS.md`.
       default/
         MEMORY.md
         _workspace.yml
-        logs/
+        diary/
           YYYY-MM-DD.md
       <workspace-name>/
         MEMORY.md
         _workspace.yml
-        logs/
+        diary/
           YYYY-MM-DD.md
 ```
 

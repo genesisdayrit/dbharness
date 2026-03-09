@@ -1,6 +1,6 @@
 # Workspaces
 
-`dbh` workspaces let you separate session logs and workspace-scoped memory by project, team, task, or domain.
+`dbh` workspaces let you separate session diary entries and workspace-scoped memory by project, team, task, or domain.
 
 ## Overview
 
@@ -9,11 +9,11 @@ Workspace files live under:
 ```text
 .dbharness/context/workspaces/
   default/
-    logs/
+    diary/
     MEMORY.md
     _workspace.yml
   <workspace-name>/
-    logs/
+    diary/
     MEMORY.md
     _workspace.yml
 ```
@@ -94,7 +94,7 @@ For workspace `<name>`, dbh creates:
 
 ```text
 .dbharness/context/workspaces/<name>/
-  logs/
+  diary/
   MEMORY.md
   _workspace.yml
 ```
@@ -166,7 +166,7 @@ Implemented now:
 
 - `dbh workspace create [--name <name>]`
 - `dbh set-default -w` (interactive active workspace selection)
-- Workspace scaffolding (`logs/`, `MEMORY.md`, `_workspace.yml`)
+- Workspace scaffolding (`diary/`, `MEMORY.md`, `_workspace.yml`)
 - Optional active workspace update in interactive flow
 
 Not yet implemented:
