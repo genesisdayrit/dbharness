@@ -81,7 +81,7 @@ func TestInstallTemplateForceCreatesFullSnapshot(t *testing.T) {
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "Recommended traversal order")
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "10 sample rows")
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "## Memory Writing")
-	assertDirectoryEmpty(t, filepath.Join(targetDir, "context", "workspaces", defaultWorkspaceName, "logs"))
+	assertDirectoryEmpty(t, filepath.Join(targetDir, "context", "workspaces", defaultWorkspaceName, "diary"))
 
 	gitignoreData, err := os.ReadFile(".gitignore")
 	if err != nil {
@@ -117,7 +117,7 @@ func TestInstallTemplateFreshIncludesAgentsGuide(t *testing.T) {
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "Multi-connection rule")
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "always start with the primary/default connection")
 	assertFileContains(t, filepath.Join(targetDir, "AGENTS.md"), "## Memory Writing")
-	assertDirectoryEmpty(t, filepath.Join(targetDir, "context", "workspaces", defaultWorkspaceName, "logs"))
+	assertDirectoryEmpty(t, filepath.Join(targetDir, "context", "workspaces", defaultWorkspaceName, "diary"))
 }
 
 func TestEnsureConnectionMemoryFileCreatesTemplate(t *testing.T) {
@@ -224,7 +224,7 @@ func TestCreateNamedWorkspaceScaffoldsExpectedFiles(t *testing.T) {
 	}
 
 	workspaceDir := filepath.Join(baseDir, "context", "workspaces", workspaceName)
-	assertDirectoryEmpty(t, filepath.Join(workspaceDir, "logs"))
+	assertDirectoryEmpty(t, filepath.Join(workspaceDir, "diary"))
 	assertFileContent(
 		t,
 		filepath.Join(workspaceDir, "MEMORY.md"),

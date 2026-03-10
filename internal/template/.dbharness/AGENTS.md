@@ -27,7 +27,7 @@ The context hierarchy is designed for targeted drill-down:
                   <table>__sample.xml
     workspaces/
       default/
-        logs/
+        diary/
           YYYY-MM-DD.md
 ```
 
@@ -102,7 +102,7 @@ worse than no memory.
 For session-level notes — what was explored, what queries were attempted, what decisions
 were made — append to:
 
-  .dbharness/context/workspaces/default/logs/YYYY-MM-DD.md
+  .dbharness/context/workspaces/default/diary/YYYY-MM-DD.md
 
 (Replace 'default' with the active workspace name if one has been configured.)
 

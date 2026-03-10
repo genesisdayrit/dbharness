@@ -338,7 +338,7 @@ func runWorkspaceCreate(args []string) {
 	}
 
 	fmt.Printf("✓ Workspace %q created at .dbharness/context/workspaces/%s/\n", workspaceName, workspaceName)
-	fmt.Println("  - logs/")
+	fmt.Println("  - diary/")
 	fmt.Println("  - MEMORY.md")
 	fmt.Println("  - _workspace.yml")
 	fmt.Println()
@@ -401,9 +401,9 @@ func createNamedWorkspace(baseDir, workspaceName string) error {
 		return fmt.Errorf("check workspace directory: %w", err)
 	}
 
-	logsDir := filepath.Join(workspaceDir, "logs")
-	if err := os.MkdirAll(logsDir, 0o755); err != nil {
-		return fmt.Errorf("create workspace logs directory: %w", err)
+	diaryDir := filepath.Join(workspaceDir, "diary")
+	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
+		return fmt.Errorf("create workspace diary directory: %w", err)
 	}
 
 	memoryPath := filepath.Join(workspaceDir, "MEMORY.md")
@@ -2603,17 +2603,17 @@ func installTemplate(targetDir string, force bool) (string, error) {
 	if err := copyFS(root, targetDir); err != nil {
 		return "", err
 	}
-	if err := ensureWorkspaceLogsDir(targetDir); err != nil {
+	if err := ensureWorkspaceDiaryDir(targetDir); err != nil {
 		return "", err
 	}
 
 	return snapshotPath, nil
 }
 
-func ensureWorkspaceLogsDir(baseDir string) error {
-	logsDir := filepath.Join(baseDir, "context", "workspaces", defaultWorkspaceName, "logs")
-	if err := os.MkdirAll(logsDir, 0o755); err != nil {
-		return fmt.Errorf("create default workspace logs directory: %w", err)
+func ensureWorkspaceDiaryDir(baseDir string) error {
+	diaryDir := filepath.Join(baseDir, "context", "workspaces", defaultWorkspaceName, "diary")
+	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
+		return fmt.Errorf("create default workspace diary directory: %w", err)
 	}
 	return nil
 }
@@ -2934,7 +2934,7 @@ func addConnectionEntry(targetDir string, firstInit bool) {
 		}
 	}
 
-	if err := ensureWorkspaceLogsDir(targetDir); err != nil {
+	if err := ensureWorkspaceDiaryDir(targetDir); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
